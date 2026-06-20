@@ -1,0 +1,36 @@
+# deps
+node_modules/
+.pnpm-store/
+
+# next
+/.next/
+/out/
+next-env.d.ts
+
+# env / secrets
+.env
+.env*.local
+.env.production
+*.key
+service-account*.json
+secrets.json
+
+# os / editor
+.DS_Store
+Thumbs.db
+
+# test artifacts
+/test-results/
+/playwright-report/
+/.playwright/
+*.local.png
+
+# logs
+*.log
+
+# playwright + screenshots
+.playwright-mcp/
+/*.png
+
+# ts build cache
+tsconfig.tsbuildinfo

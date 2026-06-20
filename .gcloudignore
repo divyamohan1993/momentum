@@ -1,0 +1,17 @@
+# Keep secrets and local cruft out of the Cloud Build upload.
+.git
+.gitignore
+node_modules
+.next
+.env
+.env*.local
+.env.production
+secrets.json
+*.key
+service-account*.json
+docs
+test-results
+playwright-report
+.playwright
+tests
+*.log

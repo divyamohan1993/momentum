@@ -1,0 +1,206 @@
+@import "tailwindcss";
+
+/* ─────────────── Momentum · "Sunrise Aurora" ───────────────
+   Light = warm cream + drifting positive aurora (default).
+   Dark  = pure black + colorful lightning (canvas).
+   Positive palette only — colors that feel human and hopeful. */
+
+@theme {
+  --color-rose: #ff4d8d;
+  --color-coral: #ff7a59;
+  --color-amber: #ff9e43;
+  --color-gold: #ffd166;
+  --color-mint: #2dd4a7;
+  --color-sky: #38bdf8;
+  --color-violet: #a78bfa;
+  --font-display: var(--font-bricolage), ui-sans-serif, system-ui, sans-serif;
+  --font-body: var(--font-jakarta), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-jbmono), ui-monospace, monospace;
+}
+
+/* ---- LIGHT (default) ---- */
+:root {
+  color-scheme: light;
+  --color-void: #fff6ef; /* warm cream base */
+  --color-panel: rgba(255, 255, 255, 0.66);
+  --color-ink: #2a2342;
+  --color-mute: #6c6488;
+  --color-faint: #a79fc2;
+  --color-edge: rgba(42, 35, 66, 0.1);
+  --color-signal: #ff4d8d; /* rose — energy */
+  --color-go: #16b890; /* mint — success */
+  --color-warn: #f0606e; /* warm coral-red — urgent, never gloomy */
+  --surface-shadow: 0 18px 50px -22px rgba(255, 77, 141, 0.35), 0 6px 18px -10px rgba(56, 189, 248, 0.25);
+  --grain-opacity: 0.025;
+  --color-magenta: var(--color-warn);
+  --color-deep: #fff1e8;
+  --color-haze: rgba(42, 35, 66, 0.06);
+  --color-violet-ink: #7c5cff;
+}
+
+/* ---- DARK ---- */
+.dark {
+  color-scheme: dark;
+  --color-void: #000000; /* pure black, per spec */
+  --color-panel: rgba(18, 16, 30, 0.52);
+  --color-ink: #f6f3ff;
+  --color-mute: #c3bbe2;
+  --color-faint: #847ba6;
+  --color-edge: rgba(255, 255, 255, 0.1);
+  --color-signal: #ff6aa8;
+  --color-go: #2dd4a7;
+  --color-warn: #ff7a90;
+  --surface-shadow: 0 0 0 1px rgba(255, 255, 255, 0.04), 0 18px 60px -20px rgba(255, 106, 168, 0.4);
+  --grain-opacity: 0.05;
+  --color-deep: #0b0814;
+  --color-haze: rgba(255, 255, 255, 0.06);
+  --color-violet-ink: #c4b5fd;
+}
+
+html,
+body {
+  height: 100%;
+}
+body {
+  margin: 0;
+  min-height: 100dvh;
+  position: relative;
+  background: var(--color-void);
+  color: var(--color-ink);
+  font-family: var(--font-body);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  overscroll-behavior: none;
+  transition: background-color 0.5s ease, color 0.4s ease;
+}
+
+/* Light: drifting positive aurora mesh. Dark: hidden (black + canvas lightning). */
+body::before {
+  content: "";
+  position: fixed;
+  inset: -25%;
+  z-index: -2;
+  background:
+    radial-gradient(38% 48% at 18% 24%, rgba(255, 122, 89, 0.5), transparent 60%),
+    radial-gradient(36% 46% at 82% 18%, rgba(56, 189, 248, 0.45), transparent 60%),
+    radial-gradient(44% 54% at 78% 82%, rgba(167, 139, 250, 0.42), transparent 62%),
+    radial-gradient(42% 50% at 22% 86%, rgba(45, 212, 167, 0.42), transparent 60%),
+    radial-gradient(34% 44% at 50% 50%, rgba(255, 209, 102, 0.38), transparent 60%);
+  filter: blur(44px) saturate(1.25);
+  animation: meshDrift 26s ease-in-out infinite alternate;
+}
+.dark body::before {
+  display: none;
+}
+@keyframes meshDrift {
+  0% {
+    transform: translate3d(0, 0, 0) scale(1) rotate(0deg);
+  }
+  100% {
+    transform: translate3d(2.5%, -2.5%, 0) scale(1.14) rotate(7deg);
+  }
+}
+
+/* grain */
+body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  opacity: var(--grain-opacity);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='3'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+/* ─────────────── primitives ─────────────── */
+.glass {
+  background: var(--color-panel);
+  border: 1px solid var(--color-edge);
+  backdrop-filter: blur(16px) saturate(140%);
+  -webkit-backdrop-filter: blur(16px) saturate(140%);
+  box-shadow: var(--surface-shadow);
+}
+
+.btn-primary {
+  background: linear-gradient(135deg, #ff8a4c 0%, #ff4d8d 52%, #a78bfa 100%);
+  color: #fff;
+  box-shadow: 0 10px 30px -10px rgba(255, 77, 141, 0.6);
+}
+.btn-primary:hover {
+  filter: brightness(1.06) saturate(1.08);
+}
+
+.lift {
+  transition: transform 240ms cubic-bezier(0.2, 0.8, 0.2, 1), box-shadow 240ms, border-color 240ms, filter 240ms;
+  will-change: transform;
+}
+
+.hairline {
+  border: 1px solid var(--color-edge);
+}
+
+.glow-signal {
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--color-signal) 45%, transparent),
+    0 12px 44px -10px color-mix(in srgb, var(--color-signal) 55%, transparent);
+  border-color: color-mix(in srgb, var(--color-signal) 45%, transparent);
+}
+
+.text-grad {
+  background: linear-gradient(120deg, #ff7a59, #ff4d8d 45%, #a78bfa 80%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-edge) transparent;
+}
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+*::-webkit-scrollbar-thumb {
+  background: var(--color-edge);
+  border-radius: 999px;
+}
+
+@keyframes materialize {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+.materialize {
+  animation: materialize 420ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+@keyframes floaty {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-6px);
+  }
+}
+
+.focus-ring:focus-visible {
+  outline: 2px solid var(--color-signal);
+  outline-offset: 2px;
+  border-radius: 10px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}

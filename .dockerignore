@@ -1,0 +1,16 @@
+node_modules
+.next
+.git
+.gitignore
+docs
+*.md
+.env
+.env*.local
+.env.production
+test-results
+playwright-report
+.playwright
+scripts/local
+*.log
+Dockerfile
+.dockerignore

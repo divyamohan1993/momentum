@@ -1,0 +1,33 @@
+{
+  "_comment": "Single source of truth for free-tier limits + the in-app guards (§6/§16.1). Verified live 2026-06-18.",
+  "project": "dmjone",
+  "region": "asia-east1",
+  "firestoreDatabase": "(default) @ asia-south2 (the only free-tier DB; named DBs are metered)",
+  "guards": {
+    "cloudRunMinInstances": 0,
+    "cloudRunMaxInstances": 1,
+    "geminiDailyCapInApp": 200,
+    "geminiKeyProject": "gen-lang-client-0693115283 (billingEnabled=false -> cannot bill, structural ₹0 wall)",
+    "reminders": "event-driven Cloud Tasks (queue momentum-reminders) — one task per reminder at its fire time; NO cron; empty queue + closed app = zero compute",
+    "fieldEncryption": "AES-256-GCM on title/description/blockedReason",
+    "edgeSecret": "optional EDGE_SECRET header gate (unset until Cloudflare is fronted)"
+  },
+  "freeTier": {
+    "cloudRunRequestsPerMonth": 2000000,
+    "cloudRunVcpuSecPerMonth": 180000,
+    "cloudRunGiBSecPerMonth": 360000,
+    "firestoreReadsPerDay": 50000,
+    "firestoreWritesPerDay": 20000,
+    "firestoreStorageGiB": 1,
+    "cloudTasksFreeOpsPerMonth": 1000000,
+    "geminiModel": "gemini-2.5-flash (free tier; 503s under load -> in-app retry x3)",
+    "webPush": "free (VAPID + FCM)"
+  },
+  "expectedUsage": {
+    "note": "single-owner personal tool; board polls a 1-doc version every 4s ONLY while a tab is open (paused when hidden), full board only on change; reminders are event-driven (no background polling)",
+    "firestoreReadsPerDayTypical": "<15000",
+    "geminiCallsPerDayTypical": "tens",
+    "idleCompute": "ZERO — no cron, empty Cloud Tasks queue when nothing is due and no tab open",
+    "verdict": "idle ₹0 by construction (nothing runs), active ₹0 (inside always-free quotas)"
+  }
+}
