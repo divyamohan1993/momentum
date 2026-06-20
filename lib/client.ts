@@ -8,7 +8,10 @@ export type BoardData = {
   unacknowledged: number;
   brain: boolean;
   push: boolean;
+  calendar: boolean;
 };
+
+export type CalToday = { enabled: boolean; connected: boolean; busy: { start: string; end: string }[]; free: { start: string; end: string }[] };
 
 const json = (body: unknown): RequestInit => ({
   method: "POST",
@@ -40,6 +43,8 @@ export const api = {
   ask: (question: string) =>
     req<{ answer: string; outcomes: { status: string; verb: string; message?: string; task?: Task }[]; degraded: boolean }>("/api/ask", json({ question })),
   briefing: () => req<{ recap: string; topRisk: string; plan: string[]; degraded: boolean }>("/api/briefing", json({})),
+  calendarToday: () => req<CalToday>("/api/calendar/today"),
+  calendarDisconnect: () => req<{ ok: boolean }>("/api/calendar/disconnect", json({})),
   pushKey: () => req<{ key: string; enabled: boolean }>("/api/push/key"),
   subscribe: (subscription: unknown) => req<{ ok: boolean }>("/api/push/subscribe", json({ subscription })),
   testPush: () => req<{ ok: boolean; sent: number; failed: number }>("/api/push/test", json({})),

@@ -261,6 +261,19 @@ export async function removePushSub(endpoint: string): Promise<void> {
   });
 }
 
+// ─────────────────────────── Google Calendar token (encrypted refresh token) ───────────────────────────
+export async function setGoogleToken(refreshToken: string): Promise<void> {
+  await coll("meta").doc("google").set({ refreshToken: encField(refreshToken), connectedAt: nowUtcIso() }, { merge: true });
+}
+export async function getGoogleToken(): Promise<string | null> {
+  const s = await coll("meta").doc("google").get();
+  if (!s.exists) return null;
+  return decField(s.data()!.refreshToken) ?? null;
+}
+export async function clearGoogleToken(): Promise<void> {
+  await coll("meta").doc("google").set({ refreshToken: null, connectedAt: null }, { merge: true });
+}
+
 // ─────────────────────────── audit (append-only; never log PII) ───────────────────────────
 export async function audit(kind: string, detail: Record<string, unknown> = {}): Promise<void> {
   try {

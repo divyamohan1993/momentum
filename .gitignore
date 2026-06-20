@@ -38,3 +38,7 @@ tsconfig.tsbuildinfo
 # generated deploy env (has secret values)
 env.deploy.yaml
 env.yaml
+
+# local backups
+backups/
+momentum-backup*.json

@@ -24,6 +24,8 @@ export type Env = {
   appBaseUrl: string;
   tasksLocation: string;
   tasksQueue: string;
+  googleClientId: string;
+  googleClientSecret: string;
 };
 
 let cached: Env | null = null;
@@ -55,8 +57,15 @@ export function env(): Env {
     appBaseUrl: process.env.APP_BASE_URL ?? "",
     tasksLocation: process.env.TASKS_LOCATION ?? "asia-east1",
     tasksQueue: process.env.TASKS_QUEUE ?? "momentum-reminders",
+    googleClientId: process.env.GOOGLE_OAUTH_CLIENT_ID ?? "",
+    googleClientSecret: process.env.GOOGLE_OAUTH_CLIENT_SECRET ?? "",
   };
   return cached;
+}
+
+export function calendarEnabled(): boolean {
+  const e = env();
+  return !!e.googleClientId && !!e.googleClientSecret;
 }
 
 export function brainEnabled(): boolean {

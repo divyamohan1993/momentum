@@ -43,6 +43,8 @@ const vars = {
   GEMINI_API_KEY: pick("GEMINI_API_KEY"), // pragma: allowlist secret
   VAPID_PUBLIC_KEY: pick("VAPID_PUBLIC_KEY"),
   VAPID_PRIVATE_KEY: pick("VAPID_PRIVATE_KEY"), // pragma: allowlist secret
+  GOOGLE_OAUTH_CLIENT_ID: pick("GOOGLE_OAUTH_CLIENT_ID"),
+  GOOGLE_OAUTH_CLIENT_SECRET: pick("GOOGLE_OAUTH_CLIENT_SECRET"), // pragma: allowlist secret
 };
 
 let out = "";

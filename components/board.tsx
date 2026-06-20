@@ -20,6 +20,7 @@ import CommandPalette from "./command-palette";
 import FocusMode from "./focus-mode";
 import Aurora from "./aurora";
 import BriefingModal from "./briefing-modal";
+import CalendarPanel from "./calendar-panel";
 import { registerPush } from "@/lib/push-client";
 import { nowIstParts, istWallToUtcIso } from "@/lib/time";
 
@@ -40,6 +41,7 @@ export default function Board({ initial }: { initial: BoardData }) {
   const [todayOnly, setTodayOnly] = useState(false);
   const [assistantMsg, setAssistantMsg] = useState<string | null>(null);
   const [briefingOpen, setBriefingOpen] = useState(false);
+  const [calendarOpen, setCalendarOpen] = useState(false);
   const versionRef = useRef(initial.version);
 
   const sensors = useSensors(
@@ -82,8 +84,13 @@ export default function Board({ initial }: { initial: BoardData }) {
   // Service worker, focus deep-link, notification status, and live OS-theme following.
   useEffect(() => {
     if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(() => {});
-    const focus = new URLSearchParams(window.location.search).get("focus");
+    const params = new URLSearchParams(window.location.search);
+    const focus = params.get("focus");
     if (focus) setFocusId(focus);
+    if (params.get("calendar")) {
+      setCalendarOpen(true);
+      window.history.replaceState({}, "", "/");
+    }
 
     // Already subscribed? then hide the "enable notifications" button.
     (async () => {
@@ -184,6 +191,7 @@ export default function Board({ initial }: { initial: BoardData }) {
           todayOnly={todayOnly}
           onToday={() => setTodayOnly((v) => !v)}
           onBriefing={() => setBriefingOpen(true)}
+          onCalendar={() => setCalendarOpen(true)}
           onPalette={() => setPaletteOpen(true)}
           onEnable={async () => {
             const ok = await registerPush(flash);
@@ -256,6 +264,8 @@ export default function Board({ initial }: { initial: BoardData }) {
 
       {briefingOpen && <BriefingModal onClose={() => setBriefingOpen(false)} />}
 
+      {calendarOpen && <CalendarPanel onClose={() => setCalendarOpen(false)} onChange={refresh} />}
+
       {toast && (
         <div className="fixed bottom-6 left-1/2 z-50 -translate-x-1/2 rounded-full glass px-5 py-2.5 text-sm shadow-2xl materialize">
           {toast}
@@ -271,6 +281,7 @@ function Header({
   todayOnly,
   onToday,
   onBriefing,
+  onCalendar,
   onPalette,
   onEnable,
 }: {
@@ -279,6 +290,7 @@ function Header({
   todayOnly: boolean;
   onToday: () => void;
   onBriefing: () => void;
+  onCalendar: () => void;
   onPalette: () => void;
   onEnable: () => void;
 }) {
@@ -318,6 +330,11 @@ function Header({
         {data.brain && (
           <button onClick={onBriefing} className="lift focus-ring hairline rounded-lg px-3 py-2 text-xs text-[var(--color-mute)] hover:text-[var(--color-ink)]">
             🗒 Briefing
+          </button>
+        )}
+        {data.calendar && (
+          <button onClick={onCalendar} className="lift focus-ring hairline rounded-lg px-3 py-2 text-xs text-[var(--color-mute)] hover:text-[var(--color-ink)]">
+            📅 Calendar
           </button>
         )}
         {data.push && !notifOn && (

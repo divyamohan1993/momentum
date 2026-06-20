@@ -3,7 +3,7 @@ import { currentOwner } from "@/lib/auth";
 import { listActiveTasks, getVersion } from "@/lib/store";
 import { unacknowledgedCount } from "@/lib/reminders";
 import { rankTasks } from "@/lib/ranking";
-import { brainEnabled, pushEnabled } from "@/lib/config";
+import { brainEnabled, pushEnabled, calendarEnabled } from "@/lib/config";
 import Board from "@/components/board";
 
 export const dynamic = "force-dynamic";
@@ -19,7 +19,7 @@ export default async function Home() {
 
   return (
     <Board
-      initial={{ version, tasks, nextBest, unacknowledged, brain: brainEnabled(), push: pushEnabled() }}
+      initial={{ version, tasks, nextBest, unacknowledged, brain: brainEnabled(), push: pushEnabled(), calendar: calendarEnabled() }}
     />
   );
 }
