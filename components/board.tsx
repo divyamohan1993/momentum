@@ -19,7 +19,9 @@ import CaptureBar from "./capture-bar";
 import CommandPalette from "./command-palette";
 import FocusMode from "./focus-mode";
 import Aurora from "./aurora";
+import BriefingModal from "./briefing-modal";
 import { registerPush } from "@/lib/push-client";
+import { nowIstParts, istWallToUtcIso } from "@/lib/time";
 
 type ColumnDef = { id: string; title: string; statuses: Status[]; target: Status; accent: string };
 const COLUMNS: ColumnDef[] = [
@@ -35,6 +37,9 @@ export default function Board({ initial }: { initial: BoardData }) {
   const [focusId, setFocusId] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [notifOn, setNotifOn] = useState(false);
+  const [todayOnly, setTodayOnly] = useState(false);
+  const [assistantMsg, setAssistantMsg] = useState<string | null>(null);
+  const [briefingOpen, setBriefingOpen] = useState(false);
   const versionRef = useRef(initial.version);
 
   const sensors = useSensors(
@@ -122,12 +127,19 @@ export default function Board({ initial }: { initial: BoardData }) {
 
   const grouped = useMemo(() => {
     const g: Record<string, Task[]> = { todo: [], doing: [], done: [] };
+    const p = nowIstParts();
+    const sod = istWallToUtcIso(p.y, p.mo, p.d, 0, 0);
+    const eod = istWallToUtcIso(p.y, p.mo, p.d, 23, 59);
+    const isToday = (t: Task) =>
+      t.status === "in_progress" ||
+      (t.status === "done" ? !!t.completedAt && t.completedAt >= sod : !!t.dueAt && t.dueAt <= eod);
     for (const t of data.tasks) {
+      if (todayOnly && !isToday(t)) continue;
       const col = COLUMNS.find((c) => c.statuses.includes(t.status));
       if (col) g[col.id]!.push(t);
     }
     return g;
-  }, [data.tasks]);
+  }, [data.tasks, todayOnly]);
 
   // Optimistic move between columns
   const move = useCallback(
@@ -169,6 +181,9 @@ export default function Board({ initial }: { initial: BoardData }) {
         <Header
           data={data}
           notifOn={notifOn}
+          todayOnly={todayOnly}
+          onToday={() => setTodayOnly((v) => !v)}
+          onBriefing={() => setBriefingOpen(true)}
           onPalette={() => setPaletteOpen(true)}
           onEnable={async () => {
             const ok = await registerPush(flash);
@@ -187,7 +202,17 @@ export default function Board({ initial }: { initial: BoardData }) {
           </div>
         )}
 
-        <CaptureBar brain={data.brain} onDone={(m) => { refresh(); if (m) flash(m); }} onFocusNext={() => data.nextBest && setFocusId(data.nextBest)} />
+        <CaptureBar brain={data.brain} onDone={(m) => { refresh(); if (m) flash(m); }} onAsk={(a) => setAssistantMsg(a)} />
+
+        {assistantMsg && (
+          <div className="glass mt-3 flex items-start gap-3 rounded-2xl p-4 materialize">
+            <span className="mt-0.5 text-lg">💬</span>
+            <p className="flex-1 text-sm leading-relaxed text-[var(--color-ink)]">{assistantMsg}</p>
+            <button onClick={() => setAssistantMsg(null)} aria-label="dismiss" className="text-[var(--color-faint)] hover:text-[var(--color-ink)]">
+              ✕
+            </button>
+          </div>
+        )}
 
         <DndContext
           sensors={sensors}
@@ -229,6 +254,8 @@ export default function Board({ initial }: { initial: BoardData }) {
 
       {focusTask && <FocusMode task={focusTask} onClose={() => setFocusId(null)} onChange={refresh} />}
 
+      {briefingOpen && <BriefingModal onClose={() => setBriefingOpen(false)} />}
+
       {toast && (
         <div className="fixed bottom-6 left-1/2 z-50 -translate-x-1/2 rounded-full glass px-5 py-2.5 text-sm shadow-2xl materialize">
           {toast}
@@ -241,11 +268,17 @@ export default function Board({ initial }: { initial: BoardData }) {
 function Header({
   data,
   notifOn,
+  todayOnly,
+  onToday,
+  onBriefing,
   onPalette,
   onEnable,
 }: {
   data: BoardData;
   notifOn: boolean;
+  todayOnly: boolean;
+  onToday: () => void;
+  onBriefing: () => void;
   onPalette: () => void;
   onEnable: () => void;
 }) {
@@ -275,7 +308,18 @@ function Header({
           </p>
         </div>
       </div>
-      <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center gap-2">
+        <button
+          onClick={onToday}
+          className={`lift focus-ring rounded-lg px-3 py-2 text-xs font-medium ${todayOnly ? "btn-primary" : "hairline text-[var(--color-mute)] hover:text-[var(--color-ink)]"}`}
+        >
+          ☀ Today
+        </button>
+        {data.brain && (
+          <button onClick={onBriefing} className="lift focus-ring hairline rounded-lg px-3 py-2 text-xs text-[var(--color-mute)] hover:text-[var(--color-ink)]">
+            🗒 Briefing
+          </button>
+        )}
         {data.push && !notifOn && (
           <button onClick={onEnable} className="lift focus-ring hairline rounded-lg px-3 py-2 text-xs text-[var(--color-mute)] hover:text-[var(--color-ink)]">
             🔔 Enable notifications

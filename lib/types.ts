@@ -22,6 +22,22 @@ export type Priority = z.infer<typeof Priority>;
 export type CognitiveLoad = z.infer<typeof CognitiveLoad>;
 export type EscalationPolicy = z.infer<typeof EscalationPolicy>;
 
+export const Subtask = z.object({
+  id: z.string(),
+  title: z.string().min(1).max(300),
+  done: z.boolean().default(false),
+  effortMins: z.number().int().positive().optional(),
+});
+export type Subtask = z.infer<typeof Subtask>;
+
+/** Simple repeat rule. On completion, the next occurrence is spawned. */
+export const Recurrence = z.object({
+  every: z.enum(["day", "week", "month"]),
+  interval: z.number().int().positive().default(1),
+  daysOfWeek: z.array(z.number().int().min(0).max(6)).optional(), // for weekly (0=Sun) — e.g. 3x/week
+});
+export type Recurrence = z.infer<typeof Recurrence>;
+
 /** A task/card. `isBlocked` is a flag, not a status (§16.4). */
 export const Task = z.object({
   id: z.string(),
@@ -39,6 +55,8 @@ export const Task = z.object({
   tags: z.array(z.string().max(40)).default([]),
   dependsOn: z.array(z.string()).default([]),
   blocks: z.array(z.string()).default([]),
+  subtasks: z.array(Subtask).default([]),
+  recurrence: Recurrence.optional(),
   escalationPolicy: EscalationPolicy.default("default"),
   rankScore: z.number().default(0),
   rankReason: z.string().default(""),
@@ -63,6 +81,7 @@ export const CapturedTask = z.object({
   cognitiveLoad: CognitiveLoad.optional(),
   tags: z.array(z.string()).default([]),
   escalationPolicy: EscalationPolicy.default("default"),
+  recurrence: Recurrence.optional(),
 });
 export type CapturedTask = z.infer<typeof CapturedTask>;
 
@@ -87,6 +106,33 @@ export const CommandResult = z.object({
   commands: z.array(Command),
 });
 export type CommandResult = z.infer<typeof CommandResult>;
+
+// ─── Intelligence contracts ───
+export const DecomposeResult = z.object({
+  subtasks: z.array(z.object({ title: z.string().min(1).max(300), effortMins: z.number().int().positive().optional() })),
+});
+export type DecomposeResult = z.infer<typeof DecomposeResult>;
+
+export const TriageResult = z.object({
+  verdict: z.enum(["split", "delegate", "kill", "keep"]),
+  reason: z.string(),
+  subtasks: z.array(z.string()).optional(),
+});
+export type TriageResult = z.infer<typeof TriageResult>;
+
+/** "Ask your board": a natural answer plus optional actions to apply (confirm-gated). */
+export const AssistantResult = z.object({
+  answer: z.string(),
+  actions: z.array(Command).default([]),
+});
+export type AssistantResult = z.infer<typeof AssistantResult>;
+
+export const BriefingResult = z.object({
+  recap: z.string(),
+  topRisk: z.string(),
+  plan: z.array(z.string()),
+});
+export type BriefingResult = z.infer<typeof BriefingResult>;
 
 /** Reminder / escalation state (§16.3 mechanics in a sweep model — D4). */
 export const ReminderStatus = z.enum(["pending", "sent", "acknowledged", "paused", "cancelled"]);

@@ -69,6 +69,9 @@ export function CardView({
   const accent = PRIORITY_ACCENT[task.priority];
   const h = task.dueAt ? hoursUntil(task.dueAt) : null;
   const overdue = h !== null && h <= 0 && task.status !== "done";
+  const ageDays = (Date.now() - new Date(task.updatedAt).getTime()) / 86_400_000;
+  const stale = ageDays >= 5 && (task.status === "todo" || task.status === "in_progress");
+  const subDone = task.subtasks.filter((s) => s.done).length;
   const pressure = h === null ? 0 : Math.max(0, Math.min(1, 1 - h / 48));
   const pressureColor = overdue ? "var(--color-magenta)" : pressure > 0.6 ? "var(--color-amber)" : "var(--color-signal)";
 
@@ -113,6 +116,11 @@ export function CardView({
         )}
         {task.effortMins ? <span className="rounded-md bg-black/30 px-1.5 py-0.5 text-[var(--color-mute)]">{task.effortMins}m</span> : null}
         {task.escalationPolicy === "critical" && <span className="rounded-md bg-[var(--color-magenta)]/20 px-1.5 py-0.5 text-[var(--color-magenta)]">critical</span>}
+        {task.subtasks.length > 0 && (
+          <span className="rounded-md bg-black/30 px-1.5 py-0.5 text-[var(--color-mute)]">✓ {subDone}/{task.subtasks.length}</span>
+        )}
+        {task.recurrence && <span className="rounded-md bg-[var(--color-go)]/15 px-1.5 py-0.5 text-[var(--color-go)]" title="repeats">🔁</span>}
+        {stale && <span className="rounded-md bg-[var(--color-amber)]/15 px-1.5 py-0.5 text-[var(--color-amber)]" title="hasn't moved in a while">🕰 {Math.round(ageDays)}d</span>}
         {task.tags.slice(0, 2).map((t) => (
           <span key={t} className="rounded-md bg-[var(--color-violet)]/12 px-1.5 py-0.5 text-[var(--color-violet)]">
             #{t}

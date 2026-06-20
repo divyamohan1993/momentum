@@ -1,7 +1,7 @@
 import "server-only";
 import { env, brainEnabled } from "./config";
 import { reserveGeminiCall } from "./store";
-import { CaptureResult, CommandResult, type Task } from "./types";
+import { CaptureResult, CommandResult, DecomposeResult, TriageResult, AssistantResult, BriefingResult, type Task } from "./types";
 import { nowContextForBrain } from "./time";
 
 /**
@@ -65,7 +65,7 @@ function parseJson(text: string): unknown {
 export async function capture(text: string): Promise<{ result: CaptureResult; degraded: boolean }> {
   const sys = `You are Momentum's capture parser. ${nowContextForBrain()}
 Return ONLY JSON: {"tasks":[{"title","description?","dueAt?"(UTC ISO 8601),"dueAtRaw?","dueAtConfident"(boolean),"priority"("low"|"med"|"high"),"priorityConfident"(boolean),"effortMins?"(integer),"cognitiveLoad?"("deep"|"shallow"),"tags?"[],"escalationPolicy"("default"|"important"|"critical")}]}.
-Split a brain-dump into separate tasks. Resolve relative/fuzzy time ("tomorrow evening", "Sunday", "in 2 hours", "before lunch") to a concrete UTC ISO instant from the IST now above. Vague-word defaults (IST): morning 09:00, noon 12:00, afternoon 15:00, evening 18:00, night 21:00, EOD 23:59. If a date is inferred/uncertain, set dueAtConfident=false and put the original phrase in dueAtRaw. Use escalationPolicy="critical" only when explicitly urgent or a hard deadline, "important" for clearly time-sensitive, else "default". No markdown, no prose.`;
+Split a brain-dump into separate tasks. Resolve relative/fuzzy time ("tomorrow evening", "Sunday", "in 2 hours", "before lunch") to a concrete UTC ISO instant from the IST now above. Vague-word defaults (IST): morning 09:00, noon 12:00, afternoon 15:00, evening 18:00, night 21:00, EOD 23:59. If a date is inferred/uncertain, set dueAtConfident=false and put the original phrase in dueAtRaw. Use escalationPolicy="critical" only when explicitly urgent or a hard deadline, "important" for clearly time-sensitive, else "default". If a task implies repetition ("daily", "every week", "every Monday", "3x/week", "monthly"), include recurrence {"every":"day"|"week"|"month","interval":int,"daysOfWeek":[0-6 where 0=Sunday]} — e.g. "gym 3x/week" → {"every":"week","interval":1,"daysOfWeek":[1,3,5]}. No markdown, no prose.`;
   try {
     const raw = await gemini(sys, text);
     const result = CaptureResult.parse(parseJson(raw));
@@ -112,5 +112,61 @@ ${cards || "(none)"}`;
     return { result, degraded: false };
   } catch {
     return { result: { transcript, commands: [] }, degraded: true };
+  }
+}
+
+/** Break a task into ordered subtasks with effort estimates. */
+export async function decompose(title: string, description?: string): Promise<{ result: DecomposeResult; degraded: boolean }> {
+  const sys = `You break a task into 3-7 concrete, ordered subtasks — each a small actionable step with a rough effort estimate in minutes. Return ONLY JSON {"subtasks":[{"title","effortMins"}]}. No prose, no markdown.`;
+  try {
+    const raw = await gemini(sys, `Task: ${title}${description ? `\nContext: ${description}` : ""}`);
+    const result = DecomposeResult.parse(parseJson(raw));
+    if (!result.subtasks.length) throw new Error("empty");
+    return { result, degraded: false };
+  } catch {
+    return { result: { subtasks: [] }, degraded: true };
+  }
+}
+
+/** Decide what to do with a stale task. */
+export async function triage(title: string, ageDays: number, status: string): Promise<{ result: TriageResult; degraded: boolean }> {
+  const sys = `A task has sat in "${status}" for ${Math.round(ageDays)} days with no progress. Decide one verdict: "split" (too big — give 2-5 subtasks), "delegate" (hand it off), "kill" (no longer worth doing), or "keep" (still valid, just needs doing). Return ONLY JSON {"verdict","reason"(one short sentence),"subtasks"(array of strings, ONLY if verdict is split)}.`;
+  try {
+    const raw = await gemini(sys, `Task: ${title}`);
+    return { result: TriageResult.parse(parseJson(raw)), degraded: false };
+  } catch {
+    return { result: { verdict: "keep", reason: "Couldn't analyse this right now." }, degraded: true };
+  }
+}
+
+/** Ask-your-board assistant: answers a question and optionally proposes actions. */
+export async function assistant(
+  question: string,
+  tasks: Pick<Task, "id" | "title" | "status" | "dueAt" | "priority" | "isBlocked">[],
+): Promise<{ result: AssistantResult; degraded: boolean }> {
+  const cards = tasks
+    .map((t) => `${t.id} :: ${t.title} [${t.status}${t.isBlocked ? ",blocked" : ""}${t.dueAt ? ",due " + t.dueAt : ""}${t.priority !== "med" ? "," + t.priority : ""}]`)
+    .join("\n");
+  const sys = `You are Momentum's assistant over the user's task board. ${nowContextForBrain()}
+Answer the user's question conversationally and briefly using the board below. If they ask to CHANGE the board (move/start/finish/block/snooze/reopen/create/reschedule), ALSO return actions[]: each {"verb":"want|doing|done|blocked|reopen|snooze|query","cardRef"(the exact card id),"newTask"{"title","priority","escalationPolicy","dueAt?"},"deadlineIST"(UTC ISO),"confidence"(0..1)}. Use the exact card id for cardRef. Return ONLY JSON {"answer": string, "actions": [...]}. Keep answer under 60 words.
+Board:
+${cards || "(empty board)"}`;
+  try {
+    const raw = await gemini(sys, question);
+    return { result: AssistantResult.parse(parseJson(raw)), degraded: false };
+  } catch {
+    return { result: { answer: "The brain is unavailable right now — try again, or use the board directly.", actions: [] }, degraded: true };
+  }
+}
+
+/** Weekly chief-of-staff briefing. */
+export async function briefing(boardSummary: string): Promise<{ result: BriefingResult; degraded: boolean }> {
+  const sys = `You are Momentum's chief of staff writing a short, motivating weekly briefing. ${nowContextForBrain()}
+From the board summary, produce: a 1-2 sentence recap of what got done, the single biggest risk this week, and a focused plan of 3-5 specific bullets for the week ahead. Be concrete, never generic. Return ONLY JSON {"recap","topRisk","plan":[...]}.`;
+  try {
+    const raw = await gemini(sys, boardSummary);
+    return { result: BriefingResult.parse(parseJson(raw)), degraded: false };
+  } catch {
+    return { result: { recap: "Briefing unavailable right now.", topRisk: "—", plan: [] }, degraded: true };
   }
 }

@@ -35,6 +35,11 @@ export const api = {
       "/api/command",
       json({ transcript }),
     ),
+  decompose: (taskId: string) => req<{ subtasks: { title: string; effortMins?: number }[]; degraded: boolean }>("/api/decompose", json({ taskId })),
+  triage: (taskId: string) => req<{ verdict: string; reason: string; subtasks?: string[]; degraded: boolean }>("/api/triage", json({ taskId })),
+  ask: (question: string) =>
+    req<{ answer: string; outcomes: { status: string; verb: string; message?: string; task?: Task }[]; degraded: boolean }>("/api/ask", json({ question })),
+  briefing: () => req<{ recap: string; topRisk: string; plan: string[]; degraded: boolean }>("/api/briefing", json({})),
   pushKey: () => req<{ key: string; enabled: boolean }>("/api/push/key"),
   subscribe: (subscription: unknown) => req<{ ok: boolean }>("/api/push/subscribe", json({ subscription })),
   testPush: () => req<{ ok: boolean; sent: number; failed: number }>("/api/push/test", json({})),

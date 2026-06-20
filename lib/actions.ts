@@ -1,6 +1,8 @@
 import "server-only";
 import { createTask, updateTask, getTask, softDeleteTask } from "./store";
 import { syncReminderForTask, acknowledge, snooze as snoozeReminder } from "./reminders";
+import { nextOccurrence } from "./recurrence";
+import { nowUtcIso } from "./time";
 import type { CapturedTask, Command, Status, Task } from "./types";
 
 /** High-level operations shared by routes — keep stores/reminders consistent in one place. */
@@ -17,6 +19,7 @@ export async function createFromCapture(owner: string, captured: CapturedTask[])
       cognitiveLoad: c.cognitiveLoad,
       tags: c.tags,
       escalationPolicy: c.escalationPolicy,
+      recurrence: c.recurrence,
       status: "todo",
     });
     await syncReminderForTask(owner, t);
@@ -35,9 +38,32 @@ export async function setStatus(owner: string, taskId: string, status: Status, e
   const t = await updateTask(owner, taskId, { status, ...extra });
   if (t) {
     await syncReminderForTask(owner, t);
-    if (status === "done") await acknowledge(owner, taskId);
+    if (status === "done") {
+      await acknowledge(owner, taskId);
+      if (t.recurrence) await spawnNextOccurrence(owner, t);
+    }
   }
   return t;
+}
+
+/** On completing a recurring task, create the next occurrence. */
+async function spawnNextOccurrence(owner: string, t: Task): Promise<void> {
+  if (!t.recurrence) return;
+  const dueAt = nextOccurrence(t.recurrence, t.dueAt ?? nowUtcIso());
+  const next = await createTask(owner, {
+    title: t.title,
+    description: t.description,
+    priority: t.priority,
+    effortMins: t.effortMins,
+    cognitiveLoad: t.cognitiveLoad,
+    tags: t.tags,
+    escalationPolicy: t.escalationPolicy,
+    recurrence: t.recurrence,
+    subtasks: (t.subtasks ?? []).map((s) => ({ ...s, done: false })),
+    dueAt,
+    status: "todo",
+  });
+  await syncReminderForTask(owner, next);
 }
 
 export async function removeTask(owner: string, taskId: string): Promise<boolean> {

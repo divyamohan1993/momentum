@@ -74,6 +74,8 @@ function toDoc(t: Task): Doc {
     tags: t.tags ?? [],
     dependsOn: t.dependsOn ?? [],
     blocks: t.blocks ?? [],
+    subtasks: (t.subtasks ?? []).map((s) => ({ ...s, title: encField(s.title) })),
+    recurrence: t.recurrence ?? null,
     escalationPolicy: t.escalationPolicy,
     rankScore: t.rankScore ?? 0,
     rankReason: t.rankReason ?? "",
@@ -102,6 +104,8 @@ function fromDoc(id: string, d: Doc): Task {
     tags: d.tags ?? [],
     dependsOn: d.dependsOn ?? [],
     blocks: d.blocks ?? [],
+    subtasks: (d.subtasks ?? []).map((s: { id: string; title: string; done?: boolean; effortMins?: number }) => ({ ...s, title: decField(s.title) ?? "" })),
+    recurrence: d.recurrence ?? undefined,
     escalationPolicy: d.escalationPolicy ?? "default",
     rankScore: d.rankScore ?? 0,
     rankReason: d.rankReason ?? "",
@@ -147,6 +151,7 @@ export async function updateTask(owner: string, id: string, patch: Partial<Task>
   const merged: Task = { ...existing, ...patch, id, ownerId: owner, updatedAt: nowUtcIso() };
   // Allow clearing the deadline: an empty string / null from the editor means "no dueAt".
   if (merged.dueAt === "" || merged.dueAt === null) merged.dueAt = undefined;
+  if ((merged.recurrence as unknown) === null) merged.recurrence = undefined;
   // status side-effects
   if (patch.status === "done" && existing.status !== "done") merged.completedAt = nowUtcIso();
   if (patch.status && patch.status !== "done") merged.completedAt = undefined;

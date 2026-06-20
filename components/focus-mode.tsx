@@ -1,9 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import type { Task } from "@/lib/types";
+import type { Task, Subtask, Recurrence } from "@/lib/types";
 import { api } from "@/lib/client";
 import { formatIst, hoursUntil } from "@/lib/time";
+
+const DOW = ["S", "M", "T", "W", "T", "F", "S"];
+type Freq = "none" | "day" | "week" | "month";
 
 /** Card detail + editor: countdown ring, editable title / deadline / priority, and actions. */
 function toLocalInput(iso?: string): string {
@@ -27,8 +30,21 @@ export default function FocusMode({ task, onClose, onChange }: { task: Task; onC
   const [title, setTitle] = useState(task.title);
   const [due, setDue] = useState(toLocalInput(task.dueAt));
   const [priority, setPriority] = useState<Task["priority"]>(task.priority);
+  const [subtasks, setSubtasks] = useState<Subtask[]>(task.subtasks);
+  const [recurrence, setRecurrence] = useState<Recurrence | undefined>(task.recurrence);
   const [busy, setBusy] = useState(false);
+  const [decomposing, setDecomposing] = useState(false);
   const [confirmDel, setConfirmDel] = useState(false);
+  const [triageMsg, setTriageMsg] = useState<{ verdict: string; reason: string; subtasks?: string[] } | null>(null);
+  const [triaging, setTriaging] = useState(false);
+  const stale = (Date.now() - new Date(task.updatedAt).getTime()) / 86_400_000 >= 5 && (task.status === "todo" || task.status === "in_progress");
+  async function runTriage() {
+    if (triaging) return;
+    setTriaging(true);
+    const r = await api.triage(task.id).catch(() => null);
+    setTriaging(false);
+    if (r) setTriageMsg(r);
+  }
 
   useEffect(() => {
     const iv = setInterval(() => setNow(Date.now()), 1000);
@@ -41,9 +57,45 @@ export default function FocusMode({ task, onClose, onChange }: { task: Task; onC
   const overdue = h !== null && h <= 0;
   const ringColor = overdue ? "#f0606e" : frac > 0.6 ? "#ff9e43" : "#38bdf8";
   const C = 2 * Math.PI * 86;
-  const dirty = title !== task.title || due !== toLocalInput(task.dueAt) || priority !== task.priority;
+  const dirty =
+    title !== task.title ||
+    due !== toLocalInput(task.dueAt) ||
+    priority !== task.priority ||
+    JSON.stringify(subtasks) !== JSON.stringify(task.subtasks) ||
+    JSON.stringify(recurrence ?? null) !== JSON.stringify(task.recurrence ?? null);
 
-  const fieldPatch = (): Partial<Task> => ({ title: title.trim(), dueAt: (due ? fromLocalInput(due) : "") as string, priority });
+  const fieldPatch = (): Partial<Task> => ({
+    title: title.trim(),
+    dueAt: (due ? fromLocalInput(due) : "") as string,
+    priority,
+    subtasks,
+    recurrence: (recurrence ?? null) as Recurrence | undefined,
+  });
+
+  const freq: Freq = recurrence?.every ?? "none";
+  function setFreq(f: Freq) {
+    if (f === "none") setRecurrence(undefined);
+    else setRecurrence({ every: f, interval: 1, daysOfWeek: f === "week" ? recurrence?.daysOfWeek ?? [] : undefined });
+  }
+  function toggleDow(d: number) {
+    if (!recurrence || recurrence.every !== "week") return;
+    const cur = recurrence.daysOfWeek ?? [];
+    setRecurrence({ ...recurrence, daysOfWeek: cur.includes(d) ? cur.filter((x) => x !== d) : [...cur, d].sort() });
+  }
+  async function breakDown() {
+    if (decomposing) return;
+    setDecomposing(true);
+    const r = await api.decompose(task.id).catch(() => null);
+    setDecomposing(false);
+    if (r?.subtasks?.length)
+      setSubtasks([...subtasks, ...r.subtasks.map((s) => ({ id: crypto.randomUUID(), title: s.title, done: false, effortMins: s.effortMins }))]);
+  }
+  function toggleSub(id: string) {
+    setSubtasks(subtasks.map((s) => (s.id === id ? { ...s, done: !s.done } : s)));
+  }
+  function removeSub(id: string) {
+    setSubtasks(subtasks.filter((s) => s.id !== id));
+  }
 
   async function commit(extra: Partial<Task>) {
     if (busy || !title.trim()) return;
@@ -70,7 +122,7 @@ export default function FocusMode({ task, onClose, onChange }: { task: Task; onC
       aria-modal="true"
       aria-label={`Edit: ${task.title}`}
     >
-      <div className="glass w-full max-w-lg rounded-3xl p-6 sm:p-8" onClick={(e) => e.stopPropagation()}>
+      <div className="glass max-h-[92vh] w-full max-w-lg overflow-y-auto rounded-3xl p-6 sm:p-8" onClick={(e) => e.stopPropagation()}>
         {dueIso ? (
           <div className="relative mx-auto h-40 w-40">
             <svg viewBox="0 0 200 200" className="h-40 w-40 -rotate-90">
@@ -143,6 +195,93 @@ export default function FocusMode({ task, onClose, onChange }: { task: Task; onC
         </div>
 
         {task.dueAt && !overdue && <p className="mt-3 text-center text-xs text-[var(--color-faint)]">{formatIst(task.dueAt)}</p>}
+
+        {stale && (
+          <div className="mt-4 rounded-xl border border-[var(--color-amber)]/40 bg-[var(--color-amber)]/10 p-3">
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-xs font-medium text-[var(--color-amber)]">🕰 This hasn&apos;t moved in a while</span>
+              {!triageMsg && (
+                <button onClick={runTriage} disabled={triaging} className="focus-ring rounded-lg bg-[var(--color-amber)]/20 px-2.5 py-1 text-xs font-medium text-[var(--color-amber)] disabled:opacity-50">
+                  {triaging ? "Thinking…" : "What should I do?"}
+                </button>
+              )}
+            </div>
+            {triageMsg && (
+              <div className="mt-2 text-sm text-[var(--color-ink)]">
+                <span className="font-semibold capitalize">{triageMsg.verdict}</span> — {triageMsg.reason}
+                {triageMsg.verdict === "split" && triageMsg.subtasks?.length ? (
+                  <button
+                    onClick={() => {
+                      setSubtasks([...subtasks, ...triageMsg.subtasks!.map((t) => ({ id: crypto.randomUUID(), title: t, done: false }))]);
+                      setTriageMsg(null);
+                    }}
+                    className="focus-ring mt-2 block rounded-lg bg-[var(--color-violet)]/15 px-2.5 py-1 text-xs font-medium text-[var(--color-violet)]"
+                  >
+                    + Add {triageMsg.subtasks.length} subtasks
+                  </button>
+                ) : null}
+              </div>
+            )}
+          </div>
+        )}
+
+        <div className="mt-5">
+          <div className="flex items-center justify-between">
+            <label className="text-xs font-medium uppercase tracking-wide text-[var(--color-faint)]">
+              Subtasks{subtasks.length > 0 ? ` · ${subtasks.filter((s) => s.done).length}/${subtasks.length}` : ""}
+            </label>
+            <button
+              onClick={breakDown}
+              disabled={decomposing}
+              className="focus-ring rounded-lg bg-[var(--color-violet)]/15 px-2.5 py-1 text-xs font-medium text-[var(--color-violet)] disabled:opacity-50"
+            >
+              {decomposing ? "Thinking…" : "✨ Break it down"}
+            </button>
+          </div>
+          {subtasks.length > 0 && (
+            <ul className="mt-2 space-y-1">
+              {subtasks.map((s) => (
+                <li key={s.id} className="flex items-center gap-2 text-sm">
+                  <input type="checkbox" checked={s.done} onChange={() => toggleSub(s.id)} className="h-4 w-4 accent-[var(--color-go)]" />
+                  <span className={s.done ? "flex-1 text-[var(--color-faint)] line-through" : "flex-1 text-[var(--color-ink)]"}>{s.title}</span>
+                  {s.effortMins ? <span className="text-xs text-[var(--color-faint)]">{s.effortMins}m</span> : null}
+                  <button onClick={() => removeSub(s.id)} aria-label="remove subtask" className="text-[var(--color-faint)] hover:text-[var(--color-warn)]">
+                    ✕
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+
+        <div className="mt-4">
+          <label className="block text-xs font-medium uppercase tracking-wide text-[var(--color-faint)]">Repeat</label>
+          <div className="mt-1 flex flex-wrap gap-1.5">
+            {(["none", "day", "week", "month"] as Freq[]).map((f) => (
+              <button
+                key={f}
+                onClick={() => setFreq(f)}
+                className={`focus-ring rounded-lg border px-3 py-1.5 text-xs font-medium ${freq === f ? "text-[var(--color-ink)]" : "text-[var(--color-mute)]"}`}
+                style={freq === f ? { borderColor: "var(--color-go)", background: "color-mix(in srgb, var(--color-go) 14%, transparent)" } : { borderColor: "var(--color-edge)" }}
+              >
+                {f === "none" ? "Never" : f === "day" ? "Daily" : f === "week" ? "Weekly" : "Monthly"}
+              </button>
+            ))}
+          </div>
+          {freq === "week" && (
+            <div className="mt-2 flex gap-1">
+              {DOW.map((d, i) => (
+                <button
+                  key={i}
+                  onClick={() => toggleDow(i)}
+                  className={`focus-ring h-7 w-7 rounded-full text-xs font-medium ${recurrence?.daysOfWeek?.includes(i) ? "bg-[var(--color-go)] text-black" : "hairline text-[var(--color-mute)]"}`}
+                >
+                  {d}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
 
         <div className="mt-6 grid grid-cols-2 gap-2.5">
           <Action onClick={() => commit({ status: "in_progress" })} primary>

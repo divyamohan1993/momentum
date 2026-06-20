@@ -3,16 +3,16 @@
 import { useEffect, useRef, useState } from "react";
 import { api } from "@/lib/client";
 
-type Mode = "capture" | "command";
+type Mode = "capture" | "ask";
 
 export default function CaptureBar({
   brain,
   onDone,
-  onFocusNext,
+  onAsk,
 }: {
   brain: boolean;
   onDone: (msg?: string) => void;
-  onFocusNext: () => void;
+  onAsk: (answer: string) => void;
 }) {
   const [mode, setMode] = useState<Mode>("capture");
   const [text, setText] = useState("");
@@ -39,13 +39,11 @@ export default function CaptureBar({
         setText("");
         onDone(r.degraded ? `Added ${r.count} (brain offline — check dates)` : `✓ Added ${r.count} card${r.count > 1 ? "s" : ""}`);
       } else {
-        const r = await api.command(value);
+        const r = await api.ask(value);
         setText("");
+        onAsk(r.degraded ? "The brain is offline right now — try the board directly." : r.answer);
         const applied = r.outcomes.filter((o) => o.status === "applied" || o.status === "created").length;
-        const confirm = r.outcomes.find((o) => o.status === "confirm");
-        if (r.degraded) onDone("Brain offline — voice commands need the brain. Use Capture or drag.");
-        else if (confirm) onDone(confirm.message ?? "Which card did you mean?");
-        else onDone(applied ? `✓ ${applied} action${applied > 1 ? "s" : ""} applied` : "No actions matched");
+        onDone(applied ? `✓ ${applied} change${applied > 1 ? "s" : ""} applied` : undefined);
       }
     } catch {
       onDone("Something went wrong");
@@ -91,9 +89,9 @@ export default function CaptureBar({
     <div className="glass mt-4 rounded-2xl p-2.5">
       <div className="mb-2 flex items-center gap-1.5">
         <Toggle active={mode === "capture"} onClick={() => setMode("capture")} label="✏️ Capture" />
-        <Toggle active={mode === "command"} onClick={() => setMode("command")} label="🎙️ Command" disabled={!brain} />
+        <Toggle active={mode === "ask"} onClick={() => setMode("ask")} label="💬 Ask" disabled={!brain} />
         <div className="ml-auto hidden text-xs text-[var(--color-faint)] sm:block">
-          {mode === "capture" ? "Brain-dump everything — it splits, dates & ranks it." : "Speak naturally: \"I'm doing the deck\", \"finished the bug fix\"."}
+          {mode === "capture" ? "Brain-dump everything — it splits, dates & ranks it." : "Ask: \"what's next?\", \"what's blocked?\", \"move this week's work to today\"."}
         </div>
       </div>
       <div className="flex items-end gap-2">
@@ -118,7 +116,7 @@ export default function CaptureBar({
             }
           }}
           rows={1}
-          placeholder={mode === "capture" ? "finish the IICA deck tomorrow, fix the citation bug, call mom Sunday…" : "say what you did, or what to do next…"}
+          placeholder={mode === "capture" ? "finish the IICA deck tomorrow, fix the citation bug, call mom Sunday…" : "what should I do next? what's blocked? plan my week…"}
           className="focus-ring min-h-[2.75rem] flex-1 resize-none rounded-xl border border-[var(--color-edge)] bg-[var(--color-haze)] px-4 py-3 text-sm text-[var(--color-ink)] placeholder:text-[var(--color-faint)] outline-none"
         />
         <button
