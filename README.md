@@ -13,7 +13,8 @@ Dump the chaos of your week into one box — typed or spoken. Momentum *understa
 - **Intelligence is the product.** Natural-language capture, semantic voice control (no trigger words), auto-ranking with visible reasons ("ranked #1: due in 18h"), adaptive escalation. Not a CRUD board with a cron.
 - **Cinematic.** A mission-control cockpit: deep-space dark, a drifting aurora, cards that lift under your cursor, a ⌘K command palette, and a Focus Mode that brings one card full-screen with a live countdown ring.
 - **₹0, by construction.** Everything is serverless and scales to zero. Reminders are **event-driven Cloud Tasks** (one task at each deadline's exact time, deleted on completion) — **no background cron**, so when nothing is due and the app is closed, *nothing runs*. Held by enforced ceilings (`max-instances=1`, a Gemini key on a billing-disabled project that *cannot* bill, free-tier quotas), not by hope.
-- **Secure by default.** Owner-locked, field-level AES-256-GCM encryption on task text, Argon2id auth behind a rate-limiter, OIDC-verified internal calls, secrets in Secret Manager.
+- **Secure by default.** Owner-locked, field-level AES-256-GCM encryption on task text, Argon2id auth behind a rate-limiter, OIDC-verified internal calls. Secrets live as GitHub Actions secrets and are injected as Cloud Run env vars at deploy (no paid Secret Manager).
+- **CI/CD.** Push to `main` → GitHub Actions builds from source and deploys to Cloud Run automatically. CI typechecks + builds every push and PR.
 
 ## Speak, and the board obeys
 

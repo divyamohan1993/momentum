@@ -8,7 +8,7 @@ import { env } from "./config";
  * access to the shared `(default)` Firestore DB, the plaintext is never exposed.
  *
  * Stored format: `v1:<base64url( iv(12) | authTag(16) | ciphertext )>`.
- * Key: 32 bytes, base64 in env `FIELD_KEY` (Secret Manager).
+ * Key: 32 bytes, base64 in env `FIELD_KEY` (a Cloud Run env var, set from a GitHub Actions secret).
  */
 const PREFIX = "v1:";
 

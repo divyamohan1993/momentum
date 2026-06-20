@@ -2,6 +2,13 @@
 
 All notable changes to Momentum. Format: [Keep a Changelog](https://keepachangelog.com).
 
+## [0.1.1] — 2026-06-20
+
+### Changed
+- **Secrets:** replaced Google Secret Manager with plain Cloud Run env vars sourced from GitHub Actions secrets (free, ₹0). Values are injected at deploy via a generated `--env-vars-file`.
+- **CI/CD:** push to `main` now auto-deploys to Cloud Run (`.github/workflows/deploy.yml`, auth via a scoped deployer service account). Docs-only pushes skip the deploy.
+- **Theme — "Sunrise Aurora":** light mode is now the default (warm cream + drifting positive aurora); dark mode is pure black with colorful lightning. Added a theme toggle and distinctive fonts (Bricolage Grotesque + Plus Jakarta Sans).
+
 ## [0.1.0] — 2026-06-18
 
 ### Added
