@@ -27,9 +27,8 @@ export const viewport: Viewport = {
   viewportFit: "cover",
 };
 
-// Set the theme before paint to avoid a flash: an explicit saved choice wins,
-// otherwise follow the OS (prefers-color-scheme).
-const themeInit = `(function(){try{var t=localStorage.getItem('momentum-theme');var d=t==='dark'||(t!=='light'&&window.matchMedia('(prefers-color-scheme: dark)').matches);document.documentElement.classList.toggle('dark',d);}catch(e){}})()`;
+// Set the theme before paint (follows the OS prefers-color-scheme) to avoid a flash.
+const themeInit = `(function(){try{document.documentElement.classList.toggle('dark',window.matchMedia('(prefers-color-scheme: dark)').matches);}catch(e){}})()`;
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (

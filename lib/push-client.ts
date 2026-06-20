@@ -29,7 +29,7 @@ export async function registerPush(flash?: (m: string) => void): Promise<boolean
     await api.subscribe(sub.toJSON());
     return true;
   } catch {
-    flash?.("Couldn't enable alarms");
+    flash?.("Couldn't enable notifications");
     return false;
   }
 }

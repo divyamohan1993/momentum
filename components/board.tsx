@@ -19,7 +19,6 @@ import CaptureBar from "./capture-bar";
 import CommandPalette from "./command-palette";
 import FocusMode from "./focus-mode";
 import Aurora from "./aurora";
-import ThemeToggle from "./theme-toggle";
 import { registerPush } from "@/lib/push-client";
 
 type ColumnDef = { id: string; title: string; statuses: Status[]; target: Status; accent: string };
@@ -35,6 +34,7 @@ export default function Board({ initial }: { initial: BoardData }) {
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [focusId, setFocusId] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+  const [notifOn, setNotifOn] = useState(false);
   const versionRef = useRef(initial.version);
 
   const sensors = useSensors(
@@ -74,11 +74,29 @@ export default function Board({ initial }: { initial: BoardData }) {
     };
   }, [refresh]);
 
-  // Service worker + (best-effort) push enrollment + focus deep-link from a notification.
+  // Service worker, focus deep-link, notification status, and live OS-theme following.
   useEffect(() => {
     if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(() => {});
     const focus = new URLSearchParams(window.location.search).get("focus");
     if (focus) setFocusId(focus);
+
+    // Already subscribed? then hide the "enable notifications" button.
+    (async () => {
+      try {
+        if ("Notification" in window && Notification.permission === "granted" && "serviceWorker" in navigator) {
+          const reg = await navigator.serviceWorker.ready;
+          if (await reg.pushManager.getSubscription()) setNotifOn(true);
+        }
+      } catch {
+        /* ignore */
+      }
+    })();
+
+    // Follow the OS light/dark setting live (no manual toggle).
+    const mq = window.matchMedia("(prefers-color-scheme: dark)");
+    const onTheme = () => document.documentElement.classList.toggle("dark", mq.matches);
+    mq.addEventListener("change", onTheme);
+    return () => mq.removeEventListener("change", onTheme);
   }, []);
 
   // ⌘K / keyboard
@@ -150,12 +168,14 @@ export default function Board({ initial }: { initial: BoardData }) {
       <main className="mx-auto flex min-h-dvh max-w-[1400px] flex-col px-4 pb-10 pt-5 sm:px-6">
         <Header
           data={data}
+          notifOn={notifOn}
           onPalette={() => setPaletteOpen(true)}
-          onTestPush={async () => {
+          onEnable={async () => {
             const ok = await registerPush(flash);
             if (ok) {
+              setNotifOn(true);
               const r = await api.testPush().catch(() => null);
-              flash(r?.sent ? "Test alarm sent 🎯" : "Subscribed — no device yet");
+              flash(r?.sent ? "Notifications on 🔔" : "Notifications on (no device yet)");
             }
           }}
         />
@@ -220,12 +240,14 @@ export default function Board({ initial }: { initial: BoardData }) {
 
 function Header({
   data,
+  notifOn,
   onPalette,
-  onTestPush,
+  onEnable,
 }: {
   data: BoardData;
+  notifOn: boolean;
   onPalette: () => void;
-  onTestPush: () => void;
+  onEnable: () => void;
 }) {
   return (
     <header className="flex flex-wrap items-center justify-between gap-3">
@@ -254,10 +276,11 @@ function Header({
         </div>
       </div>
       <div className="flex items-center gap-2">
-        <ThemeToggle />
-        <button onClick={onTestPush} className="lift focus-ring hairline rounded-lg px-3 py-2 text-xs text-[var(--color-mute)] hover:text-[var(--color-ink)]">
-          🔔 Enable alarms
-        </button>
+        {data.push && !notifOn && (
+          <button onClick={onEnable} className="lift focus-ring hairline rounded-lg px-3 py-2 text-xs text-[var(--color-mute)] hover:text-[var(--color-ink)]">
+            🔔 Enable notifications
+          </button>
+        )}
         <button onClick={onPalette} className="lift focus-ring hairline rounded-lg px-3 py-2 text-xs text-[var(--color-mute)] hover:text-[var(--color-ink)]">
           <kbd className="font-mono">⌘K</kbd> commands
         </button>

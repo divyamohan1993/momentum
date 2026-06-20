@@ -11,7 +11,7 @@ export async function POST(req: Request) {
   const r = await sendPushToAll({
     kind: "test",
     title: "🎯 Momentum",
-    body: "Notifications are live. This is your alarm channel.",
+    body: "Notifications are live. You'll be nudged here when something needs you.",
     tag: "momentum-canary",
     renotify: true,
   });
