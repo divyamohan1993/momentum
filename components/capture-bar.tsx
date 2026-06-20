@@ -92,7 +92,7 @@ export default function CaptureBar({
       <div className="mb-2 flex items-center gap-1.5">
         <Toggle active={mode === "capture"} onClick={() => setMode("capture")} label="✏️ Capture" />
         <Toggle active={mode === "command"} onClick={() => setMode("command")} label="🎙️ Command" disabled={!brain} />
-        <div className="ml-auto hidden text-[11px] text-[var(--color-faint)] sm:block">
+        <div className="ml-auto hidden text-xs text-[var(--color-faint)] sm:block">
           {mode === "capture" ? "Brain-dump everything — it splits, dates & ranks it." : "Speak naturally: \"I'm doing the deck\", \"finished the bug fix\"."}
         </div>
       </div>

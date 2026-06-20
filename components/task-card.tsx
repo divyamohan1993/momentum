@@ -91,7 +91,7 @@ export function CardView({
       style={isNextBest ? { boxShadow: "0 10px 40px -12px rgba(54,230,255,0.4)" } : undefined}
     >
       {isNextBest && (
-        <div className="mb-1.5 inline-flex items-center gap-1 rounded-full bg-[var(--color-signal)]/15 px-2 py-0.5 text-[10px] font-semibold text-[var(--color-signal)]">
+        <div className="mb-1.5 inline-flex items-center gap-1 rounded-full bg-[var(--color-signal)]/15 px-2 py-0.5 text-xs font-semibold text-[var(--color-signal)]">
           ★ NEXT BEST {task.rankReason ? `· ${task.rankReason}` : ""}
         </div>
       )}
@@ -101,7 +101,7 @@ export function CardView({
         <p className="line-clamp-3 text-sm font-medium leading-snug text-[var(--color-ink)]">{task.title}</p>
       </div>
 
-      <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[11px]">
+      <div className="mt-2 flex flex-wrap items-center gap-1.5 text-xs">
         {task.dueAt && (
           <span className="rounded-md px-1.5 py-0.5 font-mono" style={{ background: `${pressureColor}1a`, color: pressureColor }}>
             {overdue ? "⚠ overdue" : "⏱"} {shortDue(task.dueAt)}

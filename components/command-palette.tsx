@@ -62,14 +62,14 @@ export default function CommandPalette({
           <Command.Empty className="px-3 py-6 text-center text-sm text-[var(--color-faint)]">No matches.</Command.Empty>
 
           {query && (
-            <Command.Group heading="Act on this text" className="px-1 text-[11px] text-[var(--color-faint)]">
+            <Command.Group heading="Act on this text" className="px-1 text-xs text-[var(--color-faint)]">
               <Item onSelect={() => run("capture")}>✏️ Capture “{query}”</Item>
               {brain && <Item onSelect={() => run("command")}>🎙️ Run command “{query}”</Item>}
             </Command.Group>
           )}
 
           {matches.length > 0 && (
-            <Command.Group heading="Jump to card" className="px-1 text-[11px] text-[var(--color-faint)]">
+            <Command.Group heading="Jump to card" className="px-1 text-xs text-[var(--color-faint)]">
               {matches.map((t) => (
                 <Item
                   key={t.id}
@@ -80,7 +80,7 @@ export default function CommandPalette({
                 >
                   <span className="mr-2 inline-block h-1.5 w-1.5 rounded-full bg-[var(--color-signal)]" />
                   {t.title}
-                  <span className="ml-auto text-[10px] text-[var(--color-faint)]">{t.status}</span>
+                  <span className="ml-auto text-xs text-[var(--color-faint)]">{t.status}</span>
                 </Item>
               ))}
             </Command.Group>

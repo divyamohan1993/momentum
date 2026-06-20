@@ -22,11 +22,11 @@
 :root {
   color-scheme: light;
   --color-void: #fff6ef; /* warm cream base */
-  --color-panel: rgba(255, 255, 255, 0.66);
-  --color-ink: #2a2342;
-  --color-mute: #6c6488;
-  --color-faint: #a79fc2;
-  --color-edge: rgba(42, 35, 66, 0.1);
+  --color-panel: rgba(255, 255, 255, 0.9); /* opaque enough for stable text contrast */
+  --color-ink: #211b38; /* ~15:1 on glass */
+  --color-mute: #423a5c; /* ~9:1 — AAA */
+  --color-faint: #564d70; /* ~7:1 — AAA */
+  --color-edge: rgba(42, 35, 66, 0.14);
   --color-signal: #ff4d8d; /* rose — energy */
   --color-go: #16b890; /* mint — success */
   --color-warn: #f0606e; /* warm coral-red — urgent, never gloomy */
@@ -42,11 +42,11 @@
 .dark {
   color-scheme: dark;
   --color-void: #000000; /* pure black, per spec */
-  --color-panel: rgba(18, 16, 30, 0.52);
-  --color-ink: #f6f3ff;
-  --color-mute: #c3bbe2;
-  --color-faint: #847ba6;
-  --color-edge: rgba(255, 255, 255, 0.1);
+  --color-panel: rgba(15, 13, 24, 0.84); /* opaque enough for stable text contrast on black */
+  --color-ink: #f7f4ff;
+  --color-mute: #ccc5ea; /* ~12:1 */
+  --color-faint: #aaa1d4; /* ~8:1 — AAA (was too dim) */
+  --color-edge: rgba(255, 255, 255, 0.12);
   --color-signal: #ff6aa8;
   --color-go: #2dd4a7;
   --color-warn: #ff7a90;

@@ -145,6 +145,8 @@ export async function updateTask(owner: string, id: string, patch: Partial<Task>
   const existing = await getTask(owner, id);
   if (!existing) return null;
   const merged: Task = { ...existing, ...patch, id, ownerId: owner, updatedAt: nowUtcIso() };
+  // Allow clearing the deadline: an empty string / null from the editor means "no dueAt".
+  if (merged.dueAt === "" || merged.dueAt === null) merged.dueAt = undefined;
   // status side-effects
   if (patch.status === "done" && existing.status !== "done") merged.completedAt = nowUtcIso();
   if (patch.status && patch.status !== "done") merged.completedAt = undefined;

@@ -30,7 +30,7 @@ export default function Column({
         <h2 className="text-sm font-semibold tracking-wide" style={{ color: accent }}>
           {title}
         </h2>
-        <span className="rounded-full bg-black/30 px-2 py-0.5 font-mono text-[11px] text-[var(--color-faint)]">
+        <span className="rounded-full bg-black/30 px-2 py-0.5 font-mono text-xs text-[var(--color-faint)]">
           {count}
         </span>
       </div>
