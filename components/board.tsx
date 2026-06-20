@@ -231,10 +231,18 @@ function Header({
     <header className="flex flex-wrap items-center justify-between gap-3">
       <div className="flex items-center gap-3">
         <div className="grid h-10 w-10 place-items-center rounded-xl glass">
-          <span
-            className="block h-3.5 w-3.5 rounded-full"
-            style={{ background: "linear-gradient(135deg,#ff7a59,#ff4d8d 55%,#a78bfa)", boxShadow: "0 0 18px 4px rgba(255,77,141,0.55)" }}
-          />
+          <svg viewBox="0 0 64 64" className="h-7 w-7" aria-hidden>
+            <defs>
+              <linearGradient id="logoM" x1="0" y1="0" x2="1" y2="1">
+                <stop offset="0" stopColor="#ff8a4c" />
+                <stop offset="0.5" stopColor="#ff4d8d" />
+                <stop offset="1" stopColor="#a78bfa" />
+              </linearGradient>
+            </defs>
+            <circle cx="32" cy="32" r="19" fill="none" stroke="var(--color-edge)" strokeWidth="6" />
+            <circle cx="32" cy="32" r="19" fill="none" stroke="url(#logoM)" strokeWidth="6" strokeLinecap="round" strokeDasharray="90 200" transform="rotate(-90 32 32)" />
+            <circle cx="32" cy="13" r="5.5" fill="url(#logoM)" />
+          </svg>
         </div>
         <div>
           <h1 className="text-grad text-xl font-extrabold leading-none tracking-tight" style={{ fontFamily: "var(--font-display)" }}>

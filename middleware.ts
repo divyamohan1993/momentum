@@ -19,7 +19,10 @@ export async function middleware(req: NextRequest) {
     pathname === "/manifest.webmanifest" ||
     pathname === "/sw.js" ||
     pathname.startsWith("/icons") ||
-    pathname === "/favicon.ico"
+    pathname.startsWith("/icon") || // /icon.svg
+    pathname.startsWith("/apple-icon") ||
+    pathname === "/favicon.ico" ||
+    /\.(svg|png|ico|jpg|jpeg|webp|gif)$/.test(pathname) // any image asset (favicons, icons)
   ) {
     return NextResponse.next();
   }

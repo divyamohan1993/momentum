@@ -1,18 +1,19 @@
 import { ImageResponse } from "next/og";
 
-// PWA manifest icons (192 / 512). Sunrise gradient + ring + comet, matching favicon + apple-icon.
-export async function GET(_req: Request, ctx: { params: Promise<{ size: string }> }) {
-  const { size: raw } = await ctx.params;
-  const size = raw === "512" ? 512 : 192;
-  const ring = Math.round(size * 0.075);
-  const inner = Math.round(size * 0.58);
-  const dot = Math.round(size * 0.135);
+export const size = { width: 180, height: 180 };
+export const contentType = "image/png";
+
+// apple-touch-icon (iOS home screen). Sunrise gradient + ring + comet, matching the favicon.
+export default function AppleIcon() {
+  const ring = 13;
+  const inner = 104;
+  const dot = 24;
   return new ImageResponse(
     (
       <div
         style={{
-          width: size,
-          height: size,
+          width: 180,
+          height: 180,
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
@@ -30,10 +31,10 @@ export async function GET(_req: Request, ctx: { params: Promise<{ size: string }
             justifyContent: "center",
           }}
         >
-          <div style={{ width: dot, height: dot, borderRadius: dot, background: "#ffffff", marginTop: -ring - dot * 0.25 }} />
+          <div style={{ width: dot, height: dot, borderRadius: dot, background: "#ffffff", marginTop: -ring - 6 }} />
         </div>
       </div>
     ),
-    { width: size, height: size },
+    size,
   );
 }

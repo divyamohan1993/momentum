@@ -88,19 +88,19 @@ function RingMark() {
           <stop offset="1" stopColor="#a78bfa" />
         </linearGradient>
       </defs>
-      <circle cx="32" cy="32" r="26" fill="none" stroke="rgba(120,134,190,0.25)" strokeWidth="3" />
+      <circle cx="32" cy="32" r="26" fill="none" stroke="var(--color-edge)" strokeWidth="5" />
       <circle
         cx="32"
         cy="32"
         r="26"
         fill="none"
         stroke="url(#g)"
-        strokeWidth="3.5"
+        strokeWidth="5"
         strokeLinecap="round"
-        strokeDasharray="120 200"
+        strokeDasharray="124 200"
         transform="rotate(-90 32 32)"
       />
-      <circle cx="32" cy="32" r="5" fill="url(#g)" />
+      <circle cx="32" cy="6" r="5.5" fill="url(#g)" />
     </svg>
   );
 }
