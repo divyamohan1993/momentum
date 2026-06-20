@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# Momentum — idempotent deploy to Cloud Run (₹0: min=0, max=1, free-tier only).
-# Prereqs: gcloud authed; secrets pushed (scripts/provision done); APIs enabled.
+# Momentum — manual deploy to Cloud Run (₹0: min=0, max=1). Secrets come from local
+# secrets.json/.env → plain Cloud Run env vars (no Secret Manager). CI does the same from
+# GitHub Actions secrets. Prereqs: gcloud authed; secrets.json + .env present; APIs enabled.
 set -euo pipefail
 
 PROJ="${GCP_PROJECT:-dmjone}"
@@ -11,11 +12,11 @@ RUN_SA="momentum-run@${PROJ}.iam.gserviceaccount.com"
 SWEEP_SA="momentum-sweeper@${PROJ}.iam.gserviceaccount.com"
 URL="https://${SERVICE}-${PROJ_NUM}.${REGION}.run.app"
 
+ENVFILE="env.deploy.yaml"
+trap 'rm -f "$ENVFILE"' EXIT
+APP_URL="$URL" SWEEP_SA="$SWEEP_SA" node scripts/make-env-yaml.mjs > "$ENVFILE"
+
 echo "Deploying ${SERVICE} → ${URL}"
-
-# Secret Manager bindings: env-var = SECRET NAME : version (names only, never values). pragma: allowlist secret
-SECRETS="OWNER_PASSPHRASE_HASH=momentum-owner-hash:latest,SESSION_SECRET=momentum-session-secret:latest,FIELD_KEY=momentum-field-key:latest,GEMINI_API_KEY=momentum-gemini-key:latest,VAPID_PUBLIC_KEY=momentum-vapid-public:latest,VAPID_PRIVATE_KEY=momentum-vapid-private:latest" # pragma: allowlist secret
-
 gcloud run deploy "$SERVICE" \
   --source . \
   --project="$PROJ" \
@@ -29,7 +30,7 @@ gcloud run deploy "$SERVICE" \
   --timeout=60 \
   --allow-unauthenticated \
   --quiet \
-  --set-env-vars="OWNER_EMAIL=divyamohan1993@gmail.com,GEMINI_MODEL=gemini-2.5-flash,GEMINI_DAILY_CAP=200,VAPID_SUBJECT=mailto:divyamohan1993@gmail.com,GCP_PROJECT=${PROJ},NODE_ENV=production,TZ=Asia/Kolkata,SWEEP_INVOKER_SA=${SWEEP_SA},SWEEP_AUDIENCE=${URL}/api/sweep,APP_BASE_URL=${URL},TASKS_LOCATION=asia-east1,TASKS_QUEUE=momentum-reminders" \
-  --set-secrets="$SECRETS"
+  --clear-secrets \
+  --env-vars-file="$ENVFILE"
 
 echo "Deployed: ${URL}"

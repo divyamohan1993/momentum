@@ -34,3 +34,7 @@ Thumbs.db
 
 # ts build cache
 tsconfig.tsbuildinfo
+
+# generated deploy env (has secret values)
+env.deploy.yaml
+env.yaml
