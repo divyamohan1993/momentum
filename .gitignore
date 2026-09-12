@@ -42,3 +42,6 @@ env.yaml
 # local backups
 backups/
 momentum-backup*.json
+
+# Temporary credentials written by google-github-actions/auth
+gha-creds-*.json

@@ -21,3 +21,6 @@ backups
 env.deploy.yaml
 env.yaml
 secrets.json
+
+# Temporary credentials written by google-github-actions/auth
+gha-creds-*.json
