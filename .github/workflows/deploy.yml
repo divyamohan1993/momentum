@@ -62,13 +62,18 @@ jobs:
 
       - name: Deploy
         run: |
+          MOMENTUM_REVISION_SUFFIX="git-${GITHUB_SHA:0:12}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
           gcloud run deploy momentum --source . \
+            --revision-suffix="$MOMENTUM_REVISION_SUFFIX" \
             --project=dmjone --region=asia-east1 \
             --service-account=momentum-run@dmjone.iam.gserviceaccount.com \
             --min-instances=0 --max-instances=1 \
             --memory=512Mi --cpu=1 --concurrency=80 --timeout=60 \
             --allow-unauthenticated --quiet \
             --env-vars-file=env.deploy.yaml
+          gcloud run services update-traffic momentum \
+            --project=dmjone --region=asia-east1 \
+            --to-revisions="momentum-${MOMENTUM_REVISION_SUFFIX}=100" --quiet
 
       - name: Clean up env file
         if: always()

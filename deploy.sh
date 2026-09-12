@@ -22,7 +22,9 @@ trap 'rm -f "$ENVFILE"' EXIT
 APP_URL="$URL" SWEEP_SA="$SWEEP_SA" node scripts/make-env-yaml.mjs > "$ENVFILE"
 
 echo "Deploying ${SERVICE} → ${URL}"
+MOMENTUM_REVISION_SUFFIX="manual-$(git rev-parse --short=12 HEAD)-$(date +%s)"
 gcloud run deploy "$SERVICE" \
+  --revision-suffix="$MOMENTUM_REVISION_SUFFIX" \
   --source . \
   --project="$PROJ" \
   --region="$REGION" \
@@ -37,5 +39,8 @@ gcloud run deploy "$SERVICE" \
   --quiet \
   --clear-secrets \
   --env-vars-file="$ENVFILE"
+
+gcloud run services update-traffic "$SERVICE" --project="$PROJ" --region="$REGION" \
+  --to-revisions="${SERVICE}-${MOMENTUM_REVISION_SUFFIX}=100" --quiet
 
 echo "Deployed: ${URL}"
