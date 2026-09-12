@@ -1,7 +1,9 @@
 import "server-only";
 import webpush from "web-push";
 import { env, pushEnabled } from "./config";
-import { listPushSubs, removePushSub } from "./store";
+import { listPushSubs, removePushSub, coll, workspaceMeta, adminApp } from "./store";
+import { getAuth } from "firebase-admin/auth";
+import { allowedPushEndpoint, deviceMatchesWorkspace } from "./workspace-policy";
 import type { Task } from "./types";
 import { formatIst } from "./time";
 
@@ -13,15 +15,24 @@ function ensure() {
   }
 }
 
-export async function sendPushToAll(payload: Record<string, unknown>): Promise<{ sent: number; failed: number }> {
+export async function sendPushToUser(owner: string, payload: Record<string, unknown>): Promise<{ sent: number; failed: number }> {
   if (!pushEnabled()) return { sent: 0, failed: 0 };
   ensure();
-  const subs = await listPushSubs();
+  const profile = (await workspaceMeta(owner, "profile").get()).data();
+  if (!profile?.uid) return { sent: 0, failed: 0 };
+  const account = await getAuth(adminApp()).getUser(profile.uid);
+  if (account.disabled || !account.emailVerified) return { sent: 0, failed: 0 };
+  const google = account.providerData.find((p) => p.providerId === "google.com");
+  const subs = await listPushSubs(owner);
   let sent = 0;
   let failed = 0;
   await Promise.all(
     subs.map(async (s) => {
       try {
+        if (!s.deviceHash || !allowedPushEndpoint(s.endpoint)) return;
+        const device = (await coll("devices").doc(s.deviceHash).get()).data();
+        if (!deviceMatchesWorkspace(owner, device) || google?.uid !== device?.googleSub
+          || (account.tokensValidAfterTime && device!.authTime * 1000 < Date.parse(account.tokensValidAfterTime))) return;
         await webpush.sendNotification(
           { endpoint: s.endpoint, keys: s.keys },
           JSON.stringify(payload),
@@ -30,7 +41,7 @@ export async function sendPushToAll(payload: Record<string, unknown>): Promise<{
       } catch (e) {
         failed++;
         const code = (e as { statusCode?: number })?.statusCode;
-        if (code === 404 || code === 410) await removePushSub(s.endpoint); // gone — prune
+        if (code === 404 || code === 410) await removePushSub(owner, s.endpoint); // gone — prune
       }
     }),
   );

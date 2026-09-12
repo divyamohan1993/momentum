@@ -9,7 +9,7 @@ export async function GET(req: Request) {
   if ("res" in g) return g.res;
   if (!calendarEnabled()) return Response.json({ enabled: false, connected: false, busy: [], free: [] });
   try {
-    const r = await freeBusyToday();
+    const r = await freeBusyToday(g.owner);
     return Response.json({ enabled: true, ...r });
   } catch {
     return Response.json({ enabled: true, connected: false, busy: [], free: [] });

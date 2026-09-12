@@ -1,5 +1,5 @@
 /** Bound the body while streaming; Content-Length alone is not a trusted limit. */
-export async function readBrainBody(req: Request): Promise<{ data: Record<string, unknown> } | { res: Response }> {
+export async function readBrainBody(req: Request, maxBytes = 32_000): Promise<{ data: Record<string, unknown> } | { res: Response }> {
   const reader = req.body?.getReader();
   if (!reader) return { res: Response.json({ error: "JSON body required" }, { status: 400 }) };
   const chunks: Uint8Array[] = [];
@@ -9,7 +9,7 @@ export async function readBrainBody(req: Request): Promise<{ data: Record<string
       const { value, done } = await reader.read();
       if (done) break;
       size += value.byteLength;
-      if (size > 32_000) {
+      if (size > maxBytes) {
         await reader.cancel();
         return { res: Response.json({ error: "Input too large" }, { status: 413 }) };
       }

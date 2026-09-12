@@ -2,7 +2,9 @@ import { verifyActionToken } from "@/lib/tokens";
 import { setStatus, patchTask } from "@/lib/actions";
 import { snooze } from "@/lib/reminders";
 import { env } from "@/lib/config";
-import { edgeOk } from "@/lib/auth";
+import { getTask } from "@/lib/store";
+import { readBrainBody } from "@/lib/brain-request";
+import { edgeOk, deviceMayAct } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
@@ -10,13 +12,16 @@ export const dynamic = "force-dynamic";
 // (H4); the resulting state change is idempotent (a second tap finds the ladder already gone).
 export async function POST(req: Request) {
   if (!edgeOk(req)) return new Response("forbidden", { status: 403 });
-  const b = (await req.json().catch(() => ({}))) as { taskId?: unknown; action?: unknown; token?: unknown };
-  if (typeof b.taskId !== "string" || typeof b.token !== "string")
+  const body = await readBrainBody(req);
+  if ("res" in body) return body.res;
+  const b = body.data;
+  if (typeof b.taskId !== "string" || !/^[0-9a-f-]{36}$/i.test(b.taskId) || typeof b.token !== "string" || b.token.length > 2048)
     return Response.json({ error: "bad request" }, { status: 400 });
-  if (!(await verifyActionToken(b.token, b.taskId)))
+  const owner = await verifyActionToken(b.token, b.taskId);
+  if (!owner || !(await deviceMayAct(owner)))
     return Response.json({ error: "bad token" }, { status: 401 });
 
-  const owner = env().ownerEmail;
+  if (!(await getTask(owner, b.taskId))) return Response.json({ error: "not found" }, { status: 404 });
   switch (b.action) {
     case "done":
       await setStatus(owner, b.taskId, "done");

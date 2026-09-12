@@ -6,6 +6,6 @@ export const dynamic = "force-dynamic";
 export default async function LoginPage() {
   if (await currentOwner()) redirect("/");
   const e = env();
-  return <GoogleLogin enabled={!!e.firebaseApiKey && !!e.firebaseAppId && !!e.ownerGoogleUid && !!e.ownerGoogleSub}
+  return <GoogleLogin enabled={!!e.firebaseApiKey && !!e.firebaseAppId}
     config={{ apiKey: e.firebaseApiKey, appId: e.firebaseAppId, projectId: e.gcpProject, authDomain: "dmjone.firebaseapp.com" }} />;
 }

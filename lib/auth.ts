@@ -3,66 +3,88 @@ import { cookies } from "next/headers";
 import { getAuth } from "firebase-admin/auth";
 import { env } from "./config";
 import { safeEqual } from "./crypto";
-import { adminApp, adminDb, coll, audit } from "./store";
-import { opaqueToken, tokenHash } from "./login-proof";
-import { SESSION_COOKIE, SESSION_SECONDS, ownerIdentityAllowed, originAllowed, sessionAllowed, type BrowserSession } from "./auth-policy";
+import { adminApp, adminDb, coll, audit, workspaceMeta, ensureWorkspace } from "./store";
+import { createSessionCredential, validSessionCredential, createDeviceCredential, validDeviceCredential, tokenHash } from "./login-proof";
+import { SESSION_COOKIE, SESSION_SECONDS, DEVICE_COOKIE, googleIdentityAllowed, originAllowed, sessionAllowed, type BrowserSession } from "./auth-policy";
 export { SESSION_COOKIE } from "./auth-policy";
 
-const ownerIdentity = () => ({ email: env().ownerEmail, uid: env().ownerGoogleUid, googleSub: env().ownerGoogleSub, project: env().gcpProject });
-const sessionRef = () => coll("meta").doc("browser_sessions");
+import { workspaceFor, deviceMatchesWorkspace } from "./workspace-policy";
+type Session = BrowserSession & { owner: string; email: string; googleSub: string; deviceHash: string };
+export type Identity = { uid: string; owner: string; email: string; googleSub: string; deviceHash: string };
+const sessionRef = (hash: string) => coll("sessions").doc(hash);
+const workspaceOf = (uid: string) => workspaceFor(uid, env().ownerGoogleUid, env().ownerEmail);
 
-/** Only a recent, verified, non-revoked Google sign-in for the pinned owner can issue a session. */
-export async function createGoogleSession(idToken: string): Promise<string> {
+/** Google verifies identity; the session's workspace is derived exclusively on the server. */
+export async function createGoogleSession(idToken: string, timeZone?: string): Promise<{ token: string; device: string }> {
   if (process.env.FIREBASE_AUTH_EMULATOR_HOST && process.env.NODE_ENV === "production") throw new Error("auth unavailable");
   const claims = await getAuth(adminApp()).verifyIdToken(idToken, true);
-  if (!ownerIdentityAllowed(claims, ownerIdentity())) throw new Error("access denied");
-  const token = opaqueToken();
-  const now = Date.now();
-  const session: BrowserSession = { hash: tokenHash(token), uid: env().ownerGoogleUid, createdAt: now, expiresAt: now + SESSION_SECONDS * 1000, authTime: claims.auth_time };
-  const exchangeHash = tokenHash(idToken);
+  if (!googleIdentityAllowed(claims, env().gcpProject)) throw new Error("access denied");
+  const googleSub = claims.firebase.identities["google.com"][0] as string;
+  if (claims.uid === env().ownerGoogleUid && (googleSub !== env().ownerGoogleSub || claims.email?.toLowerCase() !== env().ownerEmail)) throw new Error("Legacy identity mismatch");
+  const owner = workspaceOf(claims.uid);
+  const email = claims.email!.toLowerCase();
+  await ensureWorkspace(owner, { uid: claims.uid, email, googleSub, displayName: typeof claims.name === "string" ? claims.name.slice(0, 80) : email.split("@")[0]! }, timeZone);
+  const previousDevice = (await cookies()).get(DEVICE_COOKIE)?.value;
+  const device = validDeviceCredential(previousDevice, env().sessionSecret) ? previousDevice : createDeviceCredential(env().sessionSecret);
+  const deviceHash = tokenHash(device);
+  const token = createSessionCredential(env().sessionSecret), now = Date.now();
+  const session: Session = { hash: tokenHash(token), uid: claims.uid, owner, email, googleSub, deviceHash, createdAt: now, expiresAt: now + SESSION_SECONDS * 1000, authTime: claims.auth_time };
   await adminDb().runTransaction(async (tx) => {
-    const ref = sessionRef();
-    const snap = await tx.get(ref);
-    const d = snap.data() ?? {};
+    const ref = workspaceMeta(owner, "auth");
+    const d = (await tx.get(ref)).data() ?? {};
     const exchanges: { hash: string; expiresAt: number }[] = (d.exchanges ?? []).filter((e: { expiresAt: number }) => e.expiresAt > now);
-    if (exchanges.some((e) => e.hash === exchangeHash) || exchanges.length >= 20) throw new Error("sign-in already used or limited");
-    const sessions: BrowserSession[] = (d.sessions ?? []).filter((s: BrowserSession) => sessionAllowed(s, env().ownerGoogleUid, now));
-    tx.set(ref, { sessions: [...sessions.slice(-4), session], exchanges: [...exchanges, { hash: exchangeHash, expiresAt: claims.exp * 1000 }] });
+    const exchangeHash = tokenHash(idToken);
+    if (exchanges.some((e) => e.hash === exchangeHash) || exchanges.length >= 20) throw new Error("Sign-in used or limited");
+    const existing: { hash: string; expiresAt: number }[] = d.sessions ?? [];
+    const live = existing.filter((s) => s.expiresAt > now).slice(-4);
+    for (const old of existing) if (!live.some((s) => s.hash === old.hash)) tx.delete(sessionRef(old.hash));
+    tx.set(sessionRef(session.hash), session);
+    tx.set(coll("devices").doc(deviceHash), { owner, uid: claims.uid, googleSub, email, authTime: claims.auth_time, updatedAt: now, expiresAt: now + 180 * 86_400_000 });
+    tx.set(ref, { sessions: [...live, { hash: session.hash, expiresAt: session.expiresAt }], exchanges: [...exchanges, { hash: exchangeHash, expiresAt: claims.exp * 1000 }] });
   });
-  await audit("google_login_ok");
-  return token;
+  await audit("google_login_ok", { workspace: tokenHash(owner) });
+  return { token, device };
 }
 
-export async function ownerFromToken(token?: string): Promise<string | null> {
-  // Old password JWTs, Firebase tokens and notification tokens are never portal sessions.
-  if (!token || !/^[A-Za-z0-9_-]{43}$/.test(token)) return null;
+async function identityFromToken(token?: string): Promise<Identity | null> {
+  const denied = (reason: string): null => { if (process.env.NODE_ENV === "development") console.warn(JSON.stringify({ event: "session_denied", reason })); return null; };
+  // Cheap authenticity check stops random unauthenticated cookies generating database reads.
+  if (!validSessionCredential(token, env().sessionSecret)) return denied("credential");
+  const device = (await cookies()).get(DEVICE_COOKIE)?.value;
+  if (!validDeviceCredential(device, env().sessionSecret)) return denied("device_credential");
   try {
-    const snap = await sessionRef().get();
-    const sessions: BrowserSession[] = snap.data()?.sessions ?? [];
-    const s = sessions.find((entry) => entry.hash === tokenHash(token));
-    if (!sessionAllowed(s, env().ownerGoogleUid)) return null;
-    // Check disablement and Firebase revocation on every request; no cross-request cache.
-    const user = await getAuth(adminApp()).getUser(env().ownerGoogleUid);
+    const s = (await sessionRef(tokenHash(token)).get()).data() as Session | undefined;
+    if (!s) return denied("missing_session");
+    if (!sessionAllowed(s, s.uid)) return denied("session_expiry");
+    if (workspaceOf(s.uid) !== s.owner) return denied("workspace_binding");
+    if (s.deviceHash !== tokenHash(device)) return denied("session_device_binding");
+    const binding = (await coll("devices").doc(s.deviceHash).get()).data();
+    if (!deviceMatchesWorkspace(s.owner, binding)) return denied("device_owner");
+    const user = await getAuth(adminApp()).getUser(s.uid);
     const google = user.providerData.find((p) => p.providerId === "google.com");
-    if (user.disabled || !user.emailVerified || user.email?.toLowerCase() !== env().ownerEmail
-      || google?.uid !== env().ownerGoogleSub
-      || (user.tokensValidAfterTime && s!.authTime * 1000 < Date.parse(user.tokensValidAfterTime))) return null;
-    return env().ownerEmail;
-  } catch { return null; }
+    if (user.disabled || !user.emailVerified || user.email?.toLowerCase() !== s.email || google?.uid !== s.googleSub
+      || (user.tokensValidAfterTime && s.authTime * 1000 < Date.parse(user.tokensValidAfterTime))) return denied("google_identity");
+    return { uid: s.uid, owner: s.owner, email: s.email, googleSub: s.googleSub, deviceHash: s.deviceHash };
+  } catch { return denied("store_or_identity_unavailable"); }
 }
-
-export async function currentOwner(): Promise<string | null> {
-  return ownerFromToken((await cookies()).get(SESSION_COOKIE)?.value);
+export async function ownerFromToken(token?: string): Promise<string | null> { return (await identityFromToken(token))?.owner ?? null; }
+export async function currentIdentity(): Promise<Identity | null> {
+  return identityFromToken((await cookies()).get(SESSION_COOKIE)?.value);
 }
-
+export async function currentOwner(): Promise<string | null> { return (await currentIdentity())?.owner ?? null; }
 export async function revokeCurrentSession(): Promise<void> {
   const token = (await cookies()).get(SESSION_COOKIE)?.value;
-  if (!token || !/^[A-Za-z0-9_-]{43}$/.test(token)) return;
+  if (!validSessionCredential(token, env().sessionSecret)) return;
+  const device = (await cookies()).get(DEVICE_COOKIE)?.value;
+  if (!validDeviceCredential(device, env().sessionSecret)) return;
+  const ref = sessionRef(tokenHash(token));
   await adminDb().runTransaction(async (tx) => {
-    const ref = sessionRef();
-    const d = (await tx.get(ref)).data();
-    if (!d) return;
-    tx.update(ref, { sessions: (d.sessions ?? []).filter((s: BrowserSession) => s.hash !== tokenHash(token)) });
+    const s = (await tx.get(ref)).data() as Session | undefined;
+    if (!s || s.deviceHash !== tokenHash(device)) return;
+    const deviceRef = coll("devices").doc(s.deviceHash);
+    const binding = (await tx.get(deviceRef)).data();
+    tx.delete(ref);
+    if (binding?.owner === s.owner) tx.set(deviceRef, { owner: null }, { merge: true });
   });
 }
 
@@ -89,9 +111,23 @@ export function edgeOk(req: Request): boolean {
 }
 export function originOk(req: Request): boolean { return originAllowed(req, env().appOrigin); }
 
-export async function guard(req: Request, opts: { mutation?: boolean } = {}): Promise<{ owner: string } | { res: Response }> {
+export async function guard(req: Request, opts: { mutation?: boolean } = {}): Promise<{ owner: string; user: Identity } | { res: Response }> {
   if (!edgeOk(req)) return { res: new Response("forbidden", { status: 403 }) };
   if (opts.mutation && !originOk(req)) return { res: Response.json({ error: "bad origin" }, { status: 403 }) };
-  const owner = await currentOwner();
-  return owner ? { owner } : { res: Response.json({ error: "unauthorized" }, { status: 401 }) };
+  const user = await currentIdentity();
+  return user ? { owner: user.owner, user } : { res: Response.json({ error: "unauthorized" }, { status: 401 }) };
+}
+
+
+/** A notification action needs both its task capability and the account-bound device. */
+export async function deviceMayAct(owner: string): Promise<boolean> {
+  const token = (await cookies()).get(DEVICE_COOKIE)?.value;
+  if (!validDeviceCredential(token, env().sessionSecret)) return false;
+  try {
+    const d = (await coll("devices").doc(tokenHash(token)).get()).data();
+    if (!d || !deviceMatchesWorkspace(owner, d)) return false;
+    const user = await getAuth(adminApp()).getUser(d.uid);
+    return !user.disabled && user.emailVerified && user.providerData.some((p) => p.providerId === "google.com" && p.uid === d.googleSub)
+      && (!user.tokensValidAfterTime || d.authTime * 1000 >= Date.parse(user.tokensValidAfterTime));
+  } catch { return false; }
 }

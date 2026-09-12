@@ -1,5 +1,7 @@
 # Momentum Vertex operations
 
+> The Vertex repair described here is retained. Current per-workspace quotas and data isolation are documented in [SaaS operations](saas-operations.md).
+
 The September 12, 2026 investigation found that the deployed app called the Gemini Developer API with an invalid key (`400 INVALID_ARGUMENT`, `API_KEY_INVALID`). It did not call Vertex. The runtime identity also lacked Vertex prediction permission. The Google-managed Vertex service agent already held `roles/aiplatform.serviceAgent` and needed no changes.
 
 Runtime: `momentum-run@dmjone.iam.gserviceaccount.com`. Its dedicated project custom role, `projects/dmjone/roles/momentumVertexPredictor`, grants only `aiplatform.endpoints.predict`. The existing Firestore and Cloud Tasks permissions are retained. There are no user-managed keys on this runtime identity. Do not grant the runtime the Google-managed service-agent role or Vertex administrator.

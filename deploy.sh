@@ -6,6 +6,7 @@ set -euo pipefail
 
 pnpm install --frozen-lockfile
 pnpm test
+pnpm test:workspaces
 pnpm audit --prod --audit-level=high
 
 PROJ="${GCP_PROJECT:-dmjone}"

@@ -1,4 +1,4 @@
-import type { Task } from "./types";
+import type { Task, WorkspaceProfile, Project } from "./types";
 
 /** Client-side API helpers (no server imports — safe for "use client" components). */
 export type BoardData = {
@@ -9,6 +9,9 @@ export type BoardData = {
   brain: boolean;
   push: boolean;
   calendar: boolean;
+  profile: WorkspaceProfile;
+  usage: { used: number; cap: number; date: string };
+  notificationsEnabled: boolean;
 };
 
 export type CalToday = { enabled: boolean; connected: boolean; busy: { start: string; end: string }[]; free: { start: string; end: string }[] };
@@ -21,13 +24,16 @@ const json = (body: unknown): RequestInit => ({
 
 async function req<T>(url: string, init?: RequestInit): Promise<T> {
   const r = await fetch(url, init);
-  if (!r.ok) throw Object.assign(new Error(`${url} ${r.status}`), { status: r.status });
+  if (!r.ok) {
+    const error = await r.json().catch(() => ({}));
+    throw Object.assign(new Error(typeof error.error === "string" ? error.error : "Request failed"), { status: r.status });
+  }
   return r.json() as Promise<T>;
 }
 
 export const api = {
   board: () => req<BoardData>("/api/board"),
-  version: () => req<{ version: number }>("/api/board/version"),
+  version: () => req<{ version: number; uid: string }>("/api/board/version"),
   createTask: (t: Partial<Task>) => req<{ task: Task }>("/api/tasks", json(t)),
   patchTask: (id: string, patch: Partial<Task>) =>
     req<{ task: Task }>("/api/tasks", { ...json({ id, patch }), method: "PATCH" }),
@@ -49,5 +55,16 @@ export const api = {
   subscribe: (subscription: unknown) => req<{ ok: boolean }>("/api/push/subscribe", json({ subscription })),
   testPush: () => req<{ ok: boolean; sent: number; failed: number }>("/api/push/test", json({})),
   sweep: () => req<{ ok: boolean; fired: number; archived: number }>("/api/sweep", json({})),
-  logout: () => fetch("/api/auth/logout", json({})),
+  disablePush: () => req("/api/push/subscribe", { ...json({}), method: "DELETE" }),
+  profile: () => req<{ profile: WorkspaceProfile }>("/api/workspace"),
+  updateProfile: (patch: { timeZone?: string; projects?: Project[] }) => req<{ profile: WorkspaceProfile }>("/api/workspace", { ...json(patch), method: "PATCH" }),
+  importTasks: (backup: unknown) => req<{ count: number }>("/api/workspace/import", json(backup)),
+  logout: async () => {
+    await req("/api/auth/logout", json({}));
+    if ("serviceWorker" in navigator) {
+      const registration = await navigator.serviceWorker.getRegistration();
+      for (const notification of await registration?.getNotifications() ?? []) notification.close();
+    }
+    try { localStorage.setItem("momentum-auth-change", crypto.randomUUID()); } catch {}
+  },
 };

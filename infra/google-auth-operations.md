@@ -1,4 +1,6 @@
-# Google-only owner authentication
+# Google-only owner authentication — historical rollout
+
+> This records the earlier single-owner rollout. The current multi-user design, migration rules and limits are in [SaaS operations](saas-operations.md).
 
 Momentum reuses the enabled Google provider in the `dmjone` Firebase/Identity Platform project. Only `momentum.dmj.one` was appended to the project's authorized domains; other applications' configuration was preserved. The Firebase web app is `1:107722137045:web:47107f34c4466ef4de315c`, with the existing `dmjone.firebaseapp.com` OAuth handler.
 

@@ -18,9 +18,9 @@ export async function POST(req: Request) {
 
   if ((b.transcript as string).length > 6000) return Response.json({ error: "Use at most 6000 characters" }, { status: 413 });
 
-  const active = (await listActiveTasks(g.owner)).filter((t) => !t.archivedAt && t.status !== "done");
+  const active = (await listActiveTasks(g.owner)).filter((t) => !t.archivedAt);
 
-  const { result, degraded } = await classifyCommand(
+  const { result, degraded } = await classifyCommand(g.owner,
     b.transcript.trim(),
     active.map((t) => ({ id: t.id, title: t.title, status: t.status })),
   );

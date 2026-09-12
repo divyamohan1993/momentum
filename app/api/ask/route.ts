@@ -20,7 +20,7 @@ export async function POST(req: Request) {
 
   const active = (await listActiveTasks(g.owner)).filter((t) => !t.archivedAt);
 
-  const { result, degraded } = await assistant(
+  const { result, degraded } = await assistant(g.owner,
     b.question.trim(),
     active.map((t) => ({ id: t.id, title: t.title, status: t.status, dueAt: t.dueAt, priority: t.priority, isBlocked: t.isBlocked })),
   );

@@ -36,7 +36,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   return (
     <html lang="en" suppressHydrationWarning className={`${display.variable} ${body.variable} ${mono.variable}`}>
       <head>
-        <script nonce={nonce} dangerouslySetInnerHTML={{ __html: themeInit }} />
+        <script nonce={nonce} suppressHydrationWarning dangerouslySetInnerHTML={{ __html: themeInit }} />
       </head>
       <body>{children}</body>
     </html>

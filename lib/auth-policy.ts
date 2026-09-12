@@ -1,19 +1,19 @@
 /** Pure authorization policy. Identity claims must be cryptographically verified first. */
-export const SESSION_COOKIE = "__Host-momentum_session";
+export const SESSION_COOKIE = "__Host-momentum_session_v2";
 export const SESSION_SECONDS = 8 * 60 * 60;
+export const DEVICE_COOKIE = "__Host-momentum_device";
 export const LOGIN_COOKIE = "__Host-momentum_login";
 export const LOGIN_SECONDS = 300;
 
-export type OwnerIdentity = { email: string; uid: string; googleSub: string; project: string };
-export function ownerIdentityAllowed(p: Record<string, any>, owner: OwnerIdentity, now = Math.floor(Date.now() / 1000)): boolean {
-  return !!owner.uid && !!owner.googleSub && !!owner.email && !!owner.project
-    && p.aud === owner.project && p.iss === `https://securetoken.google.com/${owner.project}`
-    && p.sub === owner.uid && p.uid === owner.uid
-    && typeof p.email === "string" && p.email.toLowerCase() === owner.email.toLowerCase()
+export function googleIdentityAllowed(p: Record<string, any>, project: string, now = Math.floor(Date.now() / 1000)): boolean {
+  return !!project && p.aud === project && p.iss === `https://securetoken.google.com/${project}`
+    && typeof p.uid === "string" && p.uid.length > 0 && p.uid.length <= 128 && p.sub === p.uid
+    && typeof p.email === "string" && p.email.length <= 320 && p.email.includes("@")
     && p.email_verified === true && !p.firebase?.tenant
     && p.firebase?.sign_in_provider === "google.com"
     && Array.isArray(p.firebase?.identities?.["google.com"])
-    && p.firebase.identities["google.com"].includes(owner.googleSub)
+    && typeof p.firebase.identities["google.com"][0] === "string"
+    && p.firebase.identities["google.com"][0].length > 0
     && Number.isSafeInteger(p.auth_time) && p.auth_time <= now + 30 && now - p.auth_time <= LOGIN_SECONDS
     && Number.isSafeInteger(p.iat) && p.iat <= now + 30 && now - p.iat <= LOGIN_SECONDS
     && p.auth_time <= p.iat + 30

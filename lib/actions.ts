@@ -1,5 +1,6 @@
 import "server-only";
-import { createTask, updateTask, getTask, softDeleteTask } from "./store";
+import { Temporal } from "@js-temporal/polyfill";
+import { createTask, updateTask, getTask, deleteTaskRecord, getWorkspaceProfile, createTasksBatch, audit } from "./store";
 import { syncReminderForTask, acknowledge, snooze as snoozeReminder } from "./reminders";
 import { nextOccurrence } from "./recurrence";
 import { nowUtcIso } from "./time";
@@ -8,24 +9,13 @@ import type { CapturedTask, Command, Status, Task } from "./types";
 /** High-level operations shared by routes — keep stores/reminders consistent in one place. */
 
 export async function createFromCapture(owner: string, captured: CapturedTask[]): Promise<Task[]> {
-  const out: Task[] = [];
-  for (const c of captured) {
-    const t = await createTask(owner, {
-      title: c.title,
-      description: c.description ?? "",
-      dueAt: c.dueAt ? new Date(c.dueAt).toISOString() : undefined, // normalize any offset → UTC Z
-      priority: c.priority,
-      effortMins: c.effortMins,
-      cognitiveLoad: c.cognitiveLoad,
-      tags: c.tags,
-      escalationPolicy: c.escalationPolicy,
-      recurrence: c.recurrence,
-      status: "todo",
-    });
-    await syncReminderForTask(owner, t);
-    out.push(t);
-  }
-  return out;
+  const tasks = await createTasksBatch(owner, captured.map((c) => ({
+    title: c.title, description: c.description ?? "", dueAt: c.dueAt ? new Date(c.dueAt).toISOString() : undefined,
+    priority: c.priority, effortMins: c.effortMins, cognitiveLoad: c.cognitiveLoad, tags: c.tags,
+    escalationPolicy: c.escalationPolicy, recurrence: c.recurrence, status: "todo" as const,
+  })));
+  await Promise.all(tasks.map((t) => syncReminderForTask(owner, t).catch(() => audit("reminder_schedule_failed", { taskId: t.id }))));
+  return tasks;
 }
 
 export async function patchTask(owner: string, taskId: string, patch: Partial<Task>): Promise<Task | null> {
@@ -35,12 +25,13 @@ export async function patchTask(owner: string, taskId: string, patch: Partial<Ta
 }
 
 export async function setStatus(owner: string, taskId: string, status: Status, extra: Partial<Task> = {}): Promise<Task | null> {
+  const previous = await getTask(owner, taskId);
   const t = await updateTask(owner, taskId, { status, ...extra });
   if (t) {
     await syncReminderForTask(owner, t);
     if (status === "done") {
       await acknowledge(owner, taskId);
-      if (t.recurrence) await spawnNextOccurrence(owner, t);
+      if (t.recurrence && previous?.status !== "done") await spawnNextOccurrence(owner, t);
     }
   }
   return t;
@@ -49,7 +40,10 @@ export async function setStatus(owner: string, taskId: string, status: Status, e
 /** On completing a recurring task, create the next occurrence. */
 async function spawnNextOccurrence(owner: string, t: Task): Promise<void> {
   if (!t.recurrence) return;
-  const dueAt = nextOccurrence(t.recurrence, t.dueAt ?? nowUtcIso());
+  const profile = await getWorkspaceProfile(owner);
+  const recurrence = { ...t.recurrence };
+  if (recurrence.every === "month" && !recurrence.dayOfMonth) recurrence.dayOfMonth = Temporal.Instant.from(t.dueAt ?? nowUtcIso()).toZonedDateTimeISO(profile.timeZone).day;
+  const dueAt = nextOccurrence(recurrence, t.dueAt ?? nowUtcIso(), profile.timeZone);
   const next = await createTask(owner, {
     title: t.title,
     description: t.description,
@@ -58,16 +52,16 @@ async function spawnNextOccurrence(owner: string, t: Task): Promise<void> {
     cognitiveLoad: t.cognitiveLoad,
     tags: t.tags,
     escalationPolicy: t.escalationPolicy,
-    recurrence: t.recurrence,
+    recurrence,
     subtasks: (t.subtasks ?? []).map((s) => ({ ...s, done: false })),
     dueAt,
     status: "todo",
-  });
+  }, `recurrence:${t.id}:${t.completedAt}`);
   await syncReminderForTask(owner, next);
 }
 
 export async function removeTask(owner: string, taskId: string): Promise<boolean> {
-  const ok = await softDeleteTask(owner, taskId);
+  const ok = await deleteTaskRecord(owner, taskId);
   if (ok) await acknowledge(owner, taskId).catch(() => {});
   return ok;
 }

@@ -16,6 +16,6 @@ export async function POST(req: Request) {
   if (!/^[0-9a-f-]{36}$/i.test(b.taskId)) return Response.json({ error: "Invalid taskId" }, { status: 400 });
   const t = await getTask(g.owner, b.taskId);
   if (!t) return Response.json({ error: "not found" }, { status: 404 });
-  const { result, degraded } = await decompose(t.title, t.description);
+  const { result, degraded } = await decompose(g.owner, t.title, t.description);
   return Response.json({ subtasks: result.subtasks, degraded });
 }

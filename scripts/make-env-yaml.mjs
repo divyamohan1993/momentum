@@ -40,6 +40,7 @@ const vars = {
   GEMINI_MODEL: "gemini-2.5-flash-lite",
   VERTEX_LOCATION: "global",
   GEMINI_DAILY_CAP: "200",
+  GEMINI_USER_DAILY_CAP: "10",
   VAPID_SUBJECT: "mailto:divyamohan1993@gmail.com",
   GCP_PROJECT: "dmjone",
   NODE_ENV: "production",

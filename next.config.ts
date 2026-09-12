@@ -3,6 +3,7 @@ import type { NextConfig } from "next";
 // Per-request nonce CSP is set in middleware.
 const nextConfig: NextConfig = {
   output: "standalone",
+  distDir: process.env.NODE_ENV !== "production" && process.env.MOMENTUM_TEST_DIST_DIR ? process.env.MOMENTUM_TEST_DIST_DIR : ".next",
   // This app uses SVG/CSS assets; no public image-processing service is needed.
   images: { unoptimized: true },
   reactStrictMode: true,

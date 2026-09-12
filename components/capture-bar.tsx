@@ -37,11 +37,11 @@ export default function CaptureBar({
       if (mode === "capture") {
         const r = await api.capture(value);
         setText("");
-        onDone(r.degraded ? `Added ${r.count} (brain offline — check dates)` : `✓ Added ${r.count} card${r.count > 1 ? "s" : ""}`);
+        onDone(r.degraded ? `Added ${r.count} (without AI — check dates)` : `✓ Added ${r.count} card${r.count > 1 ? "s" : ""}`);
       } else {
         const r = await api.ask(value);
         setText("");
-        onAsk(r.degraded ? "The brain is offline right now — try the board directly." : r.answer);
+        onAsk(r.degraded ? "AI is unavailable or its allowance is used. Your board still works manually." : r.answer);
         const applied = r.outcomes.filter((o) => o.status === "applied" || o.status === "created").length;
         onDone(applied ? `✓ ${applied} change${applied > 1 ? "s" : ""} applied` : undefined);
       }
@@ -89,7 +89,7 @@ export default function CaptureBar({
     <div className="glass mt-4 rounded-2xl p-2.5">
       <div className="mb-2 flex items-center gap-1.5">
         <Toggle active={mode === "capture"} onClick={() => setMode("capture")} label="✏️ Capture" />
-        <Toggle active={mode === "ask"} onClick={() => setMode("ask")} label={brain ? "💬 Ask" : "💬 Retry brain"} />
+        <Toggle active={mode === "ask"} onClick={() => setMode("ask")} label="💬 Ask AI" />
         <div className="ml-auto hidden text-xs text-[var(--color-faint)] sm:block">
           {mode === "capture" ? "Brain-dump everything — it splits, dates & ranks it." : "Ask: \"what's next?\", \"what's blocked?\", \"move this week's work to today\"."}
         </div>

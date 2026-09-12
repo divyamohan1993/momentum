@@ -1,5 +1,5 @@
 import { guard } from "@/lib/auth";
-import { listActiveTasks, getVersion, brainOnline } from "@/lib/store";
+import { listActiveTasks, getVersion, brainOnline, getWorkspaceProfile, geminiUsage, listPushSubs } from "@/lib/store";
 import { unacknowledgedCount } from "@/lib/reminders";
 import { rankTasks } from "@/lib/ranking";
 import { pushEnabled, calendarEnabled } from "@/lib/config";
@@ -11,11 +11,12 @@ export async function GET(req: Request) {
   if ("res" in g) return g.res;
 
   const all = await listActiveTasks(g.owner);
-  const visible = all.filter((t) => !t.archivedAt);
+  const visible = all;
   const ranked = rankTasks(visible);
-  const nextBest = ranked.find((t) => t.status === "todo" && !t.isBlocked)?.id ?? null;
-  const [version, unacknowledged, brain] = await Promise.all([getVersion(), unacknowledgedCount(g.owner), brainOnline()]);
+  const nextBest = ranked.find((t) => t.status === "todo" && !t.isBlocked && !t.archivedAt)?.id ?? null;
+  const [version, unacknowledged, brain] = await Promise.all([getVersion(g.owner), unacknowledgedCount(g.owner), brainOnline(g.owner)]);
 
+  const [profile, usage, subscriptions] = await Promise.all([getWorkspaceProfile(g.owner), geminiUsage(g.owner), listPushSubs(g.owner)]);
   return Response.json({
     version,
     tasks: ranked,
@@ -24,5 +25,6 @@ export async function GET(req: Request) {
     brain,
     push: pushEnabled(),
     calendar: calendarEnabled(),
+    profile, usage, notificationsEnabled: subscriptions.some((s) => s.deviceHash === g.user.deviceHash),
   });
 }

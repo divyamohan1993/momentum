@@ -18,6 +18,7 @@ export type Env = {
   vertexLocation: string;
   geminiModel: string;
   geminiDailyCap: number;
+  geminiUserDailyCap: number;
   vapidPublic: string;
   vapidPrivate: string;
   vapidSubject: string;
@@ -57,6 +58,7 @@ export function env(): Env {
     // Invalid limits fail closed; deployment cannot accidentally remove the cost guard.
     geminiDailyCap: /^(0|[1-9]\d*)$/.test(process.env.GEMINI_DAILY_CAP ?? "200")
       ? Math.min(200, Number(process.env.GEMINI_DAILY_CAP ?? "200")) : 0,
+    geminiUserDailyCap: /^(0|[1-9]\d*)$/.test(process.env.GEMINI_USER_DAILY_CAP ?? "10") ? Math.min(20, Number(process.env.GEMINI_USER_DAILY_CAP ?? "10")) : 0,
     vapidPublic: process.env.VAPID_PUBLIC_KEY ?? "",
     vapidPrivate: process.env.VAPID_PRIVATE_KEY ?? "",
     vapidSubject: process.env.VAPID_SUBJECT ?? "mailto:divyamohan1993@gmail.com",

@@ -26,6 +26,6 @@ export async function POST(req: Request) {
       )
       .join("\n") || "(none)");
 
-  const { result, degraded } = await briefing(summary);
+  const { result, degraded } = await briefing(g.owner, summary);
   return Response.json({ ...result, degraded });
 }

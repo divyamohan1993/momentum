@@ -30,6 +30,14 @@ jobs:
       - name: Brain regression tests
         run: pnpm test
 
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Workspace isolation integration tests
+        run: pnpm test:workspaces
+
       - name: Typecheck
         run: pnpm typecheck
 

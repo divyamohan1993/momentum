@@ -1,5 +1,6 @@
+import { reserveWorkspaceWrite } from "@/lib/store";
 import { guard } from "@/lib/auth";
-import { sendPushToAll } from "@/lib/push";
+import { sendPushToUser } from "@/lib/push";
 
 export const dynamic = "force-dynamic";
 
@@ -8,7 +9,8 @@ export const dynamic = "force-dynamic";
 export async function POST(req: Request) {
   const g = await guard(req, { mutation: true });
   if ("res" in g) return g.res;
-  const r = await sendPushToAll({
+  await reserveWorkspaceWrite(g.owner);
+  const r = await sendPushToUser(g.owner, {
     kind: "test",
     title: "🎯 Momentum",
     body: "Notifications are live. You'll be nudged here when something needs you.",

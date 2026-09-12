@@ -17,6 +17,6 @@ export async function POST(req: Request) {
   const t = await getTask(g.owner, b.taskId);
   if (!t) return Response.json({ error: "not found" }, { status: 404 });
   const ageDays = (Date.now() - new Date(t.updatedAt).getTime()) / 86_400_000;
-  const { result, degraded } = await triage(t.title, ageDays, t.status);
+  const { result, degraded } = await triage(g.owner, t.title, ageDays, t.status);
   return Response.json({ ...result, degraded });
 }

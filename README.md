@@ -1,45 +1,45 @@
 # Momentum
 
-**An AI chief-of-staff that refuses to let things slip.**
+A free, private task workspace for every Google account.
 
-Dump the chaos of your week into one box — typed or spoken. Momentum *understands* it: splits a brain-dump into real tasks, resolves "tomorrow evening" to a concrete time, infers priority and effort, ranks everything for you, and surfaces the **one thing to do next**. When a deadline nears and you've ignored it, it gets louder — a quiet push, then a full-screen alarm — and stops the instant you act.
+**Live: https://momentum.dmj.one**
 
-🔗 **Live:** https://momentum-107722137045.asia-east1.run.app
+Sign in with Google to get your own board, projects, notes, reminders and AI assistance. Accounts do not share tasks or workspace data.
 
-![board](docs/board.png)
+## Included for free
 
-## Why it's different
+- Kanban board, quick task capture, notes, priorities, tags, search and project filters.
+- Recurring tasks, editable subtasks, focus mode and deadline reminders.
+- Personal timezone settings with daylight-saving-aware deadlines and recurrence.
+- AI capture, task breakdown, stale-task triage, board questions and weekly briefings.
+- JSON backups, spreadsheet CSV export, calendar-file export and safe JSON imports.
+- Private notifications bound to the account currently using each device.
 
-- **Intelligence is the product.** Natural-language capture, semantic voice control (no trigger words), auto-ranking with visible reasons ("ranked #1: due in 18h"), adaptive escalation. Not a CRUD board with a cron.
-- **Cinematic.** A mission-control cockpit: deep-space dark, a drifting aurora, cards that lift under your cursor, a ⌘K command palette, and a Focus Mode that brings one card full-screen with a live countdown ring.
-- **Bounded running costs.** Cloud Run scales to zero; reminders use event-driven Cloud Tasks. The brain uses paid Vertex AI Gemini 2.5 Flash-Lite with at most 200 attempts/day (including retries), 10/minute, 16 KB of prompt text and 2,048 output tokens per attempt. Thinking is disabled. See [Vertex operations](infra/vertex-operations.md).
-- **Secure by default.** Owner-locked, field-level AES-256-GCM encryption on task text, Google-only sign-in pinned to the owner identity, revocable server-side sessions, OIDC-verified internal calls. Secrets live as GitHub Actions secrets and are injected as Cloud Run env vars at deploy (no paid Secret Manager).
-- **CI/CD.** Push to `main` → GitHub Actions builds from source and deploys to Cloud Run automatically. CI typechecks + builds every push and PR.
+There are no paid plans or payment-card requirements. Hosting and Vertex AI still cost the operator money, so fair-use limits apply: 10 AI attempts per workspace/day within a shared 200/day budget, up to 5,000 stored tasks, and 1,000 task changes per workspace/day within a shared 10,000/day write budget. Imports accept up to 200 tasks/1 MB at a time and create copies with reminders disabled for review.
 
-## Speak, and the board obeys
+## Security and isolation
 
-> *"I'm doing the deck and the verifier PR."* → both cards move To-Do → Doing.
-> *"finished the deck, starting the bug fix"* → one Done, one Doing, in a single breath.
+Google verifies the account. Opaque, authenticated session and device cookies map to revocable server records; user-supplied owner IDs never select a workspace. Tasks, projects, preferences, AI usage and notification subscriptions are scoped on the server. Task text uses workspace-derived AES-GCM keys. Direct browser access to Momentum's Firestore collections is denied.
 
-Intent is inferred semantically — say it however it comes out. Ambiguous? It asks instead of guessing.
+Vertex uses the Cloud Run runtime identity and the pinned Gemini 2.5 Flash-Lite model. Browser Firebase configuration grants only specific authentication API methods and cannot call Vertex. Requests, token counts, retries and shared quotas are bounded. These controls do not make a compromised cloud administrator, runtime or valid account credential harmless.
+
+See [SaaS operations](infra/saas-operations.md) for migration, quotas, deployment and verification details.
+
+## Development and checks
+
+```bash
+pnpm install --frozen-lockfile
+pnpm test
+pnpm test:workspaces       # Java 21+; local Firebase Auth/Firestore emulators only
+pnpm typecheck
+pnpm build
+pnpm audit --prod
+```
+
+Copy `.env.example` for local configuration. Google login needs a development OAuth/Firebase setup with an appropriately restricted development key; production browser keys intentionally do not authorize localhost. `scripts/gen-secrets.mjs` is for a new installation only and must not replace keys protecting existing data.
+
+Changes stay on `main`. CI and deployment run unit tests, two-account emulator checks and a production dependency audit before Cloud Build deploys the app. `bash deploy.sh` performs the same checks for a manual deployment.
 
 ## Stack
 
-Next.js 15 (App Router) · TypeScript · Tailwind v4 · Motion · dnd-kit · cmdk · Firestore (Admin SDK) · Vertex AI Gemini 2.5 Flash-Lite · Web Push (VAPID) · Cloud Run · Cloud Tasks (event-driven reminders) — deployed from source via Cloud Build.
-
-Authentication setup and security boundaries: [Google sign-in operations](infra/google-auth-operations.md).
-
-## Run it
-
-```bash
-pnpm install
-node scripts/gen-secrets.mjs        # NEW installation only; writes encryption/push secrets
-gcloud auth application-default login # local keyless Vertex + Firestore access
-pnpm dev                            # http://localhost:3000
-```
-
-Deploy (Cloud Run): `bash deploy.sh && bash setup-tasks.sh`. Architecture and locked decisions: [`docs/dmj/specs`](docs/dmj/specs/2026-06-18-momentum-build-design.md) and [`idea.md`](idea.md).
-
----
-
-Built by Divya Mohan with Claude Opus as co-architect. Aatmnirbhar Bharat — quality tools, built free.
+Next.js 15 · React · TypeScript · Tailwind CSS · Firestore Admin SDK · Firebase Google Authentication · Vertex AI · Cloud Run · Cloud Tasks · Web Push.

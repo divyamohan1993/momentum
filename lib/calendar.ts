@@ -38,8 +38,8 @@ function computeFree(startIso: string, endIso: string, busy: Slot[]): Slot[] {
   return free;
 }
 
-export async function freeBusyToday(): Promise<{ connected: boolean; busy: Slot[]; free: Slot[] }> {
-  const rt = await getGoogleToken();
+export async function freeBusyToday(owner: string): Promise<{ connected: boolean; busy: Slot[]; free: Slot[] }> {
+  const rt = await getGoogleToken(owner);
   if (!rt) return { connected: false, busy: [], free: [] };
   const c = oauthClient();
   c.setCredentials({ refresh_token: rt });

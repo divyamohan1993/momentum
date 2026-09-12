@@ -19,3 +19,26 @@ export function verifyLoginProof(cookie: string | undefined, nonce: unknown, sec
   const actual = Buffer.from(signature);
   return actual.length === expected.length && timingSafeEqual(actual, expected);
 }
+
+export function createSessionCredential(secret: string): string {
+  const id = opaqueToken();
+  return id + "." + createHmac("sha256", secret).update("momentum-session:v2:" + id).digest("base64url");
+}
+export function validSessionCredential(token: string | undefined, secret: string): token is string {
+  if (!token || !/^[A-Za-z0-9_-]{43}\.[A-Za-z0-9_-]{43}$/.test(token)) return false;
+  const [id, supplied] = token.split(".");
+  const expected = createHmac("sha256", secret).update("momentum-session:v2:" + id).digest();
+  const actual = Buffer.from(supplied!, "base64url");
+  return actual.length === expected.length && timingSafeEqual(actual, expected);
+}
+export function createDeviceCredential(secret: string): string {
+  const id = opaqueToken();
+  return id + "." + createHmac("sha256", secret).update("momentum-device:v1:" + id).digest("base64url");
+}
+export function validDeviceCredential(token: string | undefined, secret: string): token is string {
+  if (!token || !/^[A-Za-z0-9_-]{43}\.[A-Za-z0-9_-]{43}$/.test(token)) return false;
+  const [id, supplied] = token.split(".");
+  const expected = createHmac("sha256", secret).update("momentum-device:v1:" + id).digest();
+  const actual = Buffer.from(supplied!, "base64url");
+  return actual.length === expected.length && timingSafeEqual(actual, expected);
+}

@@ -45,3 +45,5 @@ momentum-backup*.json
 
 # Temporary credentials written by google-github-actions/auth
 gha-creds-*.json
+
+.next-workspace-test

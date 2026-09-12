@@ -9,7 +9,8 @@ export const dynamic = "force-dynamic";
 
 export async function GET(req: Request) {
   const base = env().appBaseUrl || req.url;
-  if (!(await currentOwner())) return NextResponse.redirect(new URL("/login", base));
+  const owner = await currentOwner();
+  if (!owner) return NextResponse.redirect(new URL("/login", base));
 
   const url = new URL(req.url);
   const code = url.searchParams.get("code");
@@ -20,7 +21,7 @@ export async function GET(req: Request) {
   try {
     const refresh = await exchangeCode(code);
     if (refresh) {
-      await setGoogleToken(refresh);
+      await setGoogleToken(owner, refresh);
       await audit("calendar_connected", {});
       return NextResponse.redirect(new URL("/?calendar=connected", base));
     }

@@ -1,4 +1,6 @@
 import { OAuth2Client } from "google-auth-library";
+import { getTask, coll } from "@/lib/store";
+import { readBrainBody } from "@/lib/brain-request";
 import { env } from "@/lib/config";
 import { fireAndChain } from "@/lib/reminders";
 import { currentOwner, edgeOk, originOk } from "@/lib/auth";
@@ -29,13 +31,16 @@ async function oidcOk(req: Request): Promise<boolean> {
 export async function POST(req: Request) {
   if (!edgeOk(req)) return new Response("forbidden", { status: 403 });
 
-  let authed = await oidcOk(req);
-  if (!authed) authed = originOk(req) && !!(await currentOwner()); // owner can also trigger (tests/manual)
-  if (!authed) return Response.json({ error: "unauthorized" }, { status: 401 });
-
-  const b = (await req.json().catch(() => ({}))) as { taskId?: unknown };
-  if (typeof b.taskId !== "string") return Response.json({ error: "taskId required" }, { status: 400 });
-
-  const result = await fireAndChain(env().ownerEmail, b.taskId);
+  const internal = await oidcOk(req);
+  const userOwner = originOk(req) ? await currentOwner() : null;
+  if (!internal && !userOwner) return Response.json({ error: "unauthorized" }, { status: 401 });
+  const body = await readBrainBody(req);
+  if ("res" in body) return body.res;
+  const taskId = body.data.taskId;
+  if (typeof taskId !== "string" || !/^[0-9a-f-]{36}$/i.test(taskId)) return Response.json({ error: "Invalid taskId" }, { status: 400 });
+  // Only the trusted task worker may resolve an owner from the stored task.
+  const owner = internal ? (await coll("tasks").doc(taskId).get()).data()?.ownerId : userOwner;
+  if (typeof owner !== "string" || !(await getTask(owner, taskId))) return internal ? Response.json({ ok: true, rescheduled: false }) : Response.json({ error: "not found" }, { status: 404 });
+  const result = await fireAndChain(owner, taskId);
   return Response.json({ ok: true, ...result });
 }

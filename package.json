@@ -11,12 +11,14 @@
     "typecheck": "tsc --noEmit",
     "lint": "next lint",
     "gen:vapid": "node scripts/gen-vapid.mjs",
-    "test": "node --experimental-strip-types --test tests/*.test.mjs"
+    "test": "node --experimental-strip-types --test tests/*.test.mjs",
+    "test:workspaces": "pnpm dlx --allow-build=re2 --allow-build=protobufjs firebase-tools@15.30.0 emulators:exec --project demo-momentum --config firebase.test.json --only auth,firestore \"node --experimental-strip-types tests/workspaces.integration.mjs\""
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
     "@dnd-kit/sortable": "^10.0.0",
     "@dnd-kit/utilities": "^3.2.2",
+    "@js-temporal/polyfill": "^0.5.1",
     "cmdk": "^1.1.1",
     "firebase": "^12.19.0",
     "firebase-admin": "^13.4.0",

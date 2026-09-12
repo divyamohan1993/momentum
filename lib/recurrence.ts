@@ -1,18 +1,16 @@
+import { Temporal } from "@js-temporal/polyfill";
 import type { Recurrence } from "./types";
-
-/** Next occurrence datetime (UTC ISO), preserving the time-of-day of `fromIso`. */
-export function nextOccurrence(rec: Recurrence, fromIso?: string): string {
-  const base = fromIso ? new Date(fromIso) : new Date();
+/** Preserve local clock time through daylight-saving changes and clamp month ends. */
+export function nextOccurrence(rec: Recurrence, fromIso?: string, timeZone = "Asia/Kolkata"): string {
+  const base = Temporal.Instant.from(fromIso ?? new Date().toISOString()).toZonedDateTimeISO(timeZone);
   if (rec.every === "week" && rec.daysOfWeek?.length) {
-    for (let i = 1; i <= 7; i++) {
-      const cand = new Date(base);
-      cand.setUTCDate(cand.getUTCDate() + i);
-      if (rec.daysOfWeek.includes(cand.getUTCDay())) return cand.toISOString();
+    for (let i = 1; i <= 7 * rec.interval + 7; i++) {
+      const candidate = base.add({ days: i });
+      const week = Math.floor((base.dayOfWeek - 1 + i) / 7);
+      if (week % rec.interval === 0 && rec.daysOfWeek.includes(candidate.dayOfWeek % 7)) return candidate.toInstant().toString({ fractionalSecondDigits: 3 });
     }
   }
-  const d = new Date(base);
-  if (rec.every === "day") d.setUTCDate(d.getUTCDate() + rec.interval);
-  else if (rec.every === "month") d.setUTCMonth(d.getUTCMonth() + rec.interval);
-  else d.setUTCDate(d.getUTCDate() + 7 * rec.interval);
-  return d.toISOString();
+  let next = rec.every === "day" ? base.add({ days: rec.interval }) : rec.every === "week" ? base.add({ weeks: rec.interval }) : base.add({ months: rec.interval });
+  if (rec.every === "month") next = next.with({ day: Math.min(rec.dayOfMonth ?? base.day, next.daysInMonth) });
+  return next.toInstant().toString({ fractionalSecondDigits: 3 });
 }

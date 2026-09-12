@@ -33,7 +33,8 @@ export type Subtask = z.infer<typeof Subtask>;
 /** Simple repeat rule. On completion, the next occurrence is spawned. */
 export const Recurrence = z.object({
   every: z.enum(["day", "week", "month"]),
-  interval: z.number().int().positive().default(1),
+  interval: z.number().int().min(1).max(365).default(1),
+  dayOfMonth: z.number().int().min(1).max(31).optional(),
   daysOfWeek: z.array(z.number().int().min(0).max(6)).optional(), // for weekly (0=Sun) — e.g. 3x/week
 });
 export type Recurrence = z.infer<typeof Recurrence>;
@@ -47,15 +48,16 @@ export const Task = z.object({
   status: Status.default("todo"),
   priority: Priority.default("med"),
   isBlocked: z.boolean().default(false),
+  remindersEnabled: z.boolean().default(true),
   blockedReason: z.string().max(500).optional(),
   dueAt: z.string().datetime().optional(),
   effortMins: z.number().int().positive().max(100000).optional(),
   cognitiveLoad: CognitiveLoad.optional(),
   projectId: z.string().optional(),
-  tags: z.array(z.string().max(40)).default([]),
+  tags: z.array(z.string().max(40)).max(20).default([]),
   dependsOn: z.array(z.string()).default([]),
   blocks: z.array(z.string()).default([]),
-  subtasks: z.array(Subtask).default([]),
+  subtasks: z.array(Subtask).max(100).default([]),
   recurrence: Recurrence.optional(),
   escalationPolicy: EscalationPolicy.default("default"),
   rankScore: z.number().default(0),
@@ -177,10 +179,10 @@ export type Reminder = z.infer<typeof Reminder>;
 
 /** A browser Web Push subscription (no phone number stored — §11 PII minimization). */
 export const PushSub = z.object({
-  endpoint: z.string().url(),
-  keys: z.object({ p256dh: z.string(), auth: z.string() }),
+  endpoint: z.string().url().max(2048),
+  keys: z.object({ p256dh: z.string().regex(/^[A-Za-z0-9_-]{87}=?$/), auth: z.string().regex(/^[A-Za-z0-9_-]{22}={0,2}$/) }),
   createdAt: z.string().datetime(),
-  label: z.string().optional(),
+  label: z.string().max(80).optional(),
 });
 export type PushSub = z.infer<typeof PushSub>;
 
@@ -192,3 +194,10 @@ export const ESCALATION_INTERVALS: Record<EscalationPolicy, number> = {
   important: 10,
   critical: 3,
 };
+
+
+export const Project = z.object({ id: z.string().uuid(), name: z.string().trim().min(1).max(50), color: z.enum(["sky", "violet", "amber", "pink", "green"]).default("sky") });
+export type Project = z.infer<typeof Project>;
+export type WorkspaceProfile = { uid: string; email: string; displayName: string; timeZone: string; createdAt: string; projects: Project[] };
+export const TaskInput = Task.pick({ title: true, description: true, status: true, priority: true, isBlocked: true, remindersEnabled: true, escalationPolicy: true, blockedReason: true, dueAt: true, effortMins: true, cognitiveLoad: true, projectId: true, tags: true, subtasks: true, recurrence: true });
+export const TaskPatch = TaskInput.partial().extend({ dueAt: z.union([z.string().datetime({ offset: true }), z.literal(""), z.null()]).optional(), recurrence: Recurrence.nullable().optional() }).strict();

@@ -6,6 +6,6 @@ export const dynamic = "force-dynamic";
 export async function POST(req: Request) {
   const g = await guard(req, { mutation: true });
   if ("res" in g) return g.res;
-  await clearGoogleToken();
+  await clearGoogleToken(g.owner);
   return Response.json({ ok: true });
 }

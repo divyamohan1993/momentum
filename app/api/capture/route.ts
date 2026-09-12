@@ -18,7 +18,7 @@ export async function POST(req: Request) {
 
   if ((b.text as string).length > 6000) return Response.json({ error: "Use at most 6000 characters" }, { status: 413 });
 
-  const { result, degraded } = await capture(b.text.trim());
+  const { result, degraded } = await capture(g.owner, b.text.trim());
   const tasks = await createFromCapture(g.owner, result.tasks);
   return Response.json({ tasks, degraded, count: tasks.length });
 }

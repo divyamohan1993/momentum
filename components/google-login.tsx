@@ -32,10 +32,15 @@ export default function GoogleLogin({ config, enabled }: { config: FirebaseOptio
       const idToken = await credential.value.user.getIdToken();
       const r = await fetch("/api/auth/google", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ idToken, csrf: proof.value.csrf }),
+        body: JSON.stringify({ idToken, csrf: proof.value.csrf, timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone }),
       });
-      if (!r.ok) { setError(r.status === 429 ? "Please wait a moment and try again." : "Access is limited to the authorized Google account."); return; }
+      if (!r.ok) { setError(r.status === 429 ? "Please wait a moment and try again." : "Sign in with a verified Google account to continue."); return; }
       await signOut(auth).catch(() => {});
+      if ("serviceWorker" in navigator) {
+        const registration = await navigator.serviceWorker.getRegistration();
+        for (const notification of await registration?.getNotifications() ?? []) notification.close();
+      }
+      try { localStorage.setItem("momentum-auth-change", crypto.randomUUID()); } catch {}
       window.location.replace("/");
     } catch {
       setError("Sign-in was not completed. Please try again and allow the Google popup.");
@@ -56,7 +61,7 @@ export default function GoogleLogin({ config, enabled }: { config: FirebaseOptio
         </button>
         {!enabled && <p role="alert" className="mt-3 text-sm text-[var(--color-magenta)]">Google sign-in is temporarily unavailable.</p>}
         {error && <p role="alert" className="mt-3 text-sm text-[var(--color-magenta)]">{error}</p>}
-        <p className="mt-6 text-xs text-[var(--color-faint)]">Private access for the authorized owner.</p>
+        <p className="mt-6 text-xs text-[var(--color-faint)]">Your Google account. Your private workspace. Always free.</p>
       </section>
     </main>
   );

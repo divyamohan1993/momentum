@@ -1,33 +1,32 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import type { Task, Subtask, Recurrence } from "@/lib/types";
+import type { Task, Subtask, Recurrence, Project } from "@/lib/types";
+import { useWorkspaceTimeZone } from "./workspace-context";
 import { api } from "@/lib/client";
-import { formatIst, hoursUntil } from "@/lib/time";
+import { formatIst, hoursUntil, dateInput, parseDateInput } from "@/lib/time";
 
 const DOW = ["S", "M", "T", "W", "T", "F", "S"];
 type Freq = "none" | "day" | "week" | "month";
 
 /** Card detail + editor: countdown ring, editable title / deadline / priority, and actions. */
-function toLocalInput(iso?: string): string {
-  if (!iso) return "";
-  const d = new Date(iso);
-  const p = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
-}
-function fromLocalInput(v: string): string {
-  return new Date(v).toISOString();
-}
-
 const PRIOS: { v: Task["priority"]; label: string; color: string }[] = [
   { v: "low", label: "Low", color: "var(--color-violet)" },
   { v: "med", label: "Medium", color: "var(--color-amber)" },
   { v: "high", label: "High", color: "var(--color-signal)" },
 ];
 
-export default function FocusMode({ task, onClose, onChange }: { task: Task; onClose: () => void; onChange: () => void }) {
+export default function FocusMode({ task, projects, onClose, onChange }: { task: Task; projects: Project[]; onClose: () => void; onChange: () => void }) {
+  const timeZone = useWorkspaceTimeZone();
+  const toLocalInput = (iso?: string) => dateInput(iso, timeZone);
+  const fromLocalInput = (value: string) => parseDateInput(value, timeZone);
   const [now, setNow] = useState(Date.now());
   const [title, setTitle] = useState(task.title);
+  const [description, setDescription] = useState(task.description);
+  const [projectId, setProjectId] = useState(task.projectId ?? "");
+  const [tags, setTags] = useState(task.tags.join(", "));
+  const [remindersEnabled, setRemindersEnabled] = useState(task.remindersEnabled);
+  const [error, setError] = useState("");
   const [due, setDue] = useState(toLocalInput(task.dueAt));
   const [priority, setPriority] = useState<Task["priority"]>(task.priority);
   const [subtasks, setSubtasks] = useState<Subtask[]>(task.subtasks);
@@ -58,14 +57,14 @@ export default function FocusMode({ task, onClose, onChange }: { task: Task; onC
   const ringColor = overdue ? "#f0606e" : frac > 0.6 ? "#ff9e43" : "#38bdf8";
   const C = 2 * Math.PI * 86;
   const dirty =
-    title !== task.title ||
+    title !== task.title || description !== task.description || projectId !== (task.projectId ?? "") || tags !== task.tags.join(", ") || remindersEnabled !== task.remindersEnabled ||
     due !== toLocalInput(task.dueAt) ||
     priority !== task.priority ||
     JSON.stringify(subtasks) !== JSON.stringify(task.subtasks) ||
     JSON.stringify(recurrence ?? null) !== JSON.stringify(task.recurrence ?? null);
 
   const fieldPatch = (): Partial<Task> => ({
-    title: title.trim(),
+    title: title.trim(), description, projectId: projectId || "", tags: tags.split(",").map((s) => s.trim()).filter(Boolean), remindersEnabled,
     dueAt: (due ? fromLocalInput(due) : "") as string,
     priority,
     subtasks,
@@ -100,7 +99,7 @@ export default function FocusMode({ task, onClose, onChange }: { task: Task; onC
   async function commit(extra: Partial<Task>) {
     if (busy || !title.trim()) return;
     setBusy(true);
-    await api.patchTask(task.id, { ...(dirty ? fieldPatch() : {}), ...extra }).catch(() => {});
+    try { await api.patchTask(task.id, { ...(dirty ? fieldPatch() : {}), ...extra }); } catch (e) { setError((e as Error).message); setBusy(false); return; }
     setBusy(false);
     onChange();
     onClose();
@@ -108,7 +107,7 @@ export default function FocusMode({ task, onClose, onChange }: { task: Task; onC
   async function del() {
     if (busy) return;
     setBusy(true);
-    await api.deleteTask(task.id).catch(() => {});
+    try { await api.deleteTask(task.id); } catch (e) { setError((e as Error).message); setBusy(false); return; }
     setBusy(false);
     onChange();
     onClose();
@@ -158,6 +157,12 @@ export default function FocusMode({ task, onClose, onChange }: { task: Task; onC
           className="focus-ring mt-1 w-full rounded-xl border border-[var(--color-edge)] bg-[var(--color-haze)] px-3 py-2.5 text-[15px] font-medium text-[var(--color-ink)] outline-none"
         />
 
+        <label className="mt-4 block text-xs font-medium" htmlFor="task-notes">Notes</label><textarea id="task-notes" maxLength={5000} value={description} onChange={(e) => setDescription(e.target.value)} rows={3} className="focus-ring mt-1 w-full rounded-xl border border-[var(--color-edge)] bg-[var(--color-haze)] px-3 py-2 text-sm" />
+        <label className="mt-3 block text-xs font-medium" htmlFor="task-project">Project</label><select id="task-project" value={projectId} onChange={(e) => setProjectId(e.target.value)} className="focus-ring mt-1 w-full rounded-xl border border-[var(--color-edge)] bg-[var(--color-panel)] px-3 py-2 text-sm"><option value="">Inbox</option>{projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}</select>
+        <label className="mt-3 block text-xs font-medium" htmlFor="task-tags">Tags, separated by commas</label><input id="task-tags" value={tags} onChange={(e) => setTags(e.target.value)} maxLength={500} className="focus-ring mt-1 w-full rounded-xl border border-[var(--color-edge)] bg-[var(--color-haze)] px-3 py-2 text-sm" />
+        <label className="mt-3 flex items-center gap-2 text-sm"><input type="checkbox" checked={remindersEnabled} onChange={(e) => setRemindersEnabled(e.target.checked)} /> Remind me at the deadline</label>
+        <p className="mt-2 text-xs text-[var(--color-faint)]">Dates use {timeZone}.</p>
+        {error && <p role="alert" className="mt-3 text-sm text-[var(--color-magenta)]">{error}</p>}
         <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div>
             <label className="block text-xs font-medium uppercase tracking-wide text-[var(--color-faint)]">Deadline</label>
@@ -194,7 +199,7 @@ export default function FocusMode({ task, onClose, onChange }: { task: Task; onC
           </div>
         </div>
 
-        {task.dueAt && !overdue && <p className="mt-3 text-center text-xs text-[var(--color-faint)]">{formatIst(task.dueAt)}</p>}
+        {task.dueAt && !overdue && <p className="mt-3 text-center text-xs text-[var(--color-faint)]">{formatIst(task.dueAt, timeZone)}</p>}
 
         {stale && (
           <div className="mt-4 rounded-xl border border-[var(--color-amber)]/40 bg-[var(--color-amber)]/10 p-3">

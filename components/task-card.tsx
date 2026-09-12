@@ -1,9 +1,11 @@
 "use client";
 
+import { useState } from "react";
 import { useDraggable } from "@dnd-kit/core";
 import { CSS } from "@dnd-kit/utilities";
 import type { Task } from "@/lib/types";
 import { api } from "@/lib/client";
+import { useWorkspaceTimeZone } from "./workspace-context";
 import { formatIst, hoursUntil } from "@/lib/time";
 
 const PRIORITY_ACCENT: Record<Task["priority"], string> = {
@@ -66,6 +68,8 @@ export function CardView({
   onChange?: () => void;
   dragging?: boolean;
 }) {
+  const timeZone = useWorkspaceTimeZone();
+  const [error, setError] = useState("");
   const accent = PRIORITY_ACCENT[task.priority];
   const h = task.dueAt ? hoursUntil(task.dueAt) : null;
   const overdue = h !== null && h <= 0 && task.status !== "done";
@@ -77,7 +81,8 @@ export function CardView({
 
   async function quick(e: React.MouseEvent, patch: Partial<Task>) {
     e.stopPropagation();
-    await api.patchTask(task.id, patch).catch(() => {});
+    setError("");
+    try { await api.patchTask(task.id, patch); } catch (e) { setError((e as Error).message); }
     onChange?.();
   }
 
@@ -87,12 +92,13 @@ export function CardView({
       role="button"
       tabIndex={0}
       onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && onOpen?.()}
-      aria-label={`${task.title}${task.dueAt ? ", due " + formatIst(task.dueAt) : ""}${task.isBlocked ? ", blocked" : ""}`}
+      aria-label={`${task.title}${task.dueAt ? ", due " + formatIst(task.dueAt, timeZone) : ""}${task.isBlocked ? ", blocked" : ""}`}
       className={`lift group relative cursor-grab overflow-hidden rounded-xl bg-[var(--color-panel)]/80 p-3 hairline active:cursor-grabbing ${
         dragging ? "glow-signal rotate-[1.5deg] scale-[1.03] shadow-2xl" : "hover:-translate-y-0.5"
       } ${isNextBest ? "ring-1 ring-[var(--color-signal)]/50" : ""}`}
       style={isNextBest ? { boxShadow: "0 10px 40px -12px rgba(54,230,255,0.4)" } : undefined}
     >
+      {error && <p role="alert" className="mb-2 text-xs text-[var(--color-magenta)]">{error}</p>}
       {isNextBest && (
         <div className="mb-1.5 inline-flex items-center gap-1 rounded-full bg-[var(--color-signal)]/15 px-2 py-0.5 text-xs font-semibold text-[var(--color-signal)]">
           ★ NEXT BEST {task.rankReason ? `· ${task.rankReason}` : ""}
@@ -107,7 +113,7 @@ export function CardView({
       <div className="mt-2 flex flex-wrap items-center gap-1.5 text-xs">
         {task.dueAt && (
           <span className="rounded-md px-1.5 py-0.5 font-mono" style={{ background: `${pressureColor}1a`, color: pressureColor }}>
-            {overdue ? "⚠ overdue" : "⏱"} {shortDue(task.dueAt)}
+            {overdue ? "⚠ overdue" : "⏱"} {shortDue(task.dueAt, timeZone)}
           </span>
         )}
         {task.isBlocked && <span className="rounded-md bg-[var(--color-magenta)]/15 px-1.5 py-0.5 text-[var(--color-magenta)]">⛔ blocked</span>}
@@ -164,9 +170,9 @@ function QuickBtn({ children, label, onClick }: { children: React.ReactNode; lab
   );
 }
 
-function shortDue(iso: string): string {
+function shortDue(iso: string, timeZone: string): string {
   const h = hoursUntil(iso);
   if (h <= 0) return `${Math.round(-h)}h ago`;
   if (h < 24) return `${Math.round(h)}h`;
-  return formatIst(iso).replace(" IST", "");
+  return formatIst(iso, timeZone).replace(" IST", "");
 }
