@@ -14,3 +14,8 @@ scripts/local
 *.log
 Dockerfile
 .dockerignore
+
+# Generated deployment credentials must never enter a source archive or image.
+env.deploy.yaml
+env.yaml
+secrets.json

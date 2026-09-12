@@ -1,3 +1,4 @@
+import { readBrainBody } from "@/lib/brain-request";
 import { guard } from "@/lib/auth";
 import { classifyCommand } from "@/lib/brain";
 import { applyCommand } from "@/lib/actions";
@@ -9,11 +10,16 @@ export const dynamic = "force-dynamic";
 export async function POST(req: Request) {
   const g = await guard(req, { mutation: true });
   if ("res" in g) return g.res;
-  const b = (await req.json().catch(() => ({}))) as { transcript?: unknown };
+  const body = await readBrainBody(req);
+  if ("res" in body) return body.res;
+  const b = body.data;
   if (typeof b.transcript !== "string" || !b.transcript.trim())
     return Response.json({ error: "transcript required" }, { status: 400 });
 
+  if ((b.transcript as string).length > 6000) return Response.json({ error: "Use at most 6000 characters" }, { status: 413 });
+
   const active = (await listActiveTasks(g.owner)).filter((t) => !t.archivedAt && t.status !== "done");
+
   const { result, degraded } = await classifyCommand(
     b.transcript.trim(),
     active.map((t) => ({ id: t.id, title: t.title, status: t.status })),

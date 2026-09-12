@@ -1,3 +1,4 @@
+import { readBrainBody } from "@/lib/brain-request";
 import { guard } from "@/lib/auth";
 import { getTask } from "@/lib/store";
 import { triage } from "@/lib/brain";
@@ -8,8 +9,11 @@ export const dynamic = "force-dynamic";
 export async function POST(req: Request) {
   const g = await guard(req, { mutation: true });
   if ("res" in g) return g.res;
-  const b = (await req.json().catch(() => ({}))) as { taskId?: unknown };
+  const body = await readBrainBody(req);
+  if ("res" in body) return body.res;
+  const b = body.data;
   if (typeof b.taskId !== "string") return Response.json({ error: "taskId required" }, { status: 400 });
+  if (!/^[0-9a-f-]{36}$/i.test(b.taskId)) return Response.json({ error: "Invalid taskId" }, { status: 400 });
   const t = await getTask(g.owner, b.taskId);
   if (!t) return Response.json({ error: "not found" }, { status: 404 });
   const ageDays = (Date.now() - new Date(t.updatedAt).getTime()) / 86_400_000;

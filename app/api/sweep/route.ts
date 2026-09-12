@@ -1,5 +1,5 @@
 import { OAuth2Client } from "google-auth-library";
-import { currentOwner, edgeOk } from "@/lib/auth";
+import { currentOwner, edgeOk, originOk } from "@/lib/auth";
 import { env } from "@/lib/config";
 import { sweep } from "@/lib/reminders";
 import { archiveOldDone } from "@/lib/store";
@@ -11,6 +11,7 @@ const oauth = new OAuth2Client();
 // Full OIDC claim pinning (review B7): signature, iss (Google lib), aud, SA email, email_verified, exp.
 async function oidcOk(req: Request): Promise<boolean> {
   const h = req.headers.get("authorization") ?? "";
+  if (!env().appBaseUrl || !env().sweepInvokerSa || !env().sweepAudience) return false;
   const m = /^Bearer (.+)$/.exec(h);
   if (!m) return false;
   try {
@@ -34,7 +35,7 @@ export async function POST(req: Request) {
   if (!edgeOk(req)) return new Response("forbidden", { status: 403 });
 
   let authed = await oidcOk(req);
-  if (!authed) authed = !!(await currentOwner());
+  if (!authed) authed = originOk(req) && !!(await currentOwner());
   if (!authed) return Response.json({ error: "unauthorized" }, { status: 401 });
 
   const owner = env().ownerEmail;

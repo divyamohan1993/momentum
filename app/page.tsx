@@ -1,9 +1,9 @@
 import { redirect } from "next/navigation";
 import { currentOwner } from "@/lib/auth";
-import { listActiveTasks, getVersion } from "@/lib/store";
+import { listActiveTasks, getVersion, brainOnline } from "@/lib/store";
 import { unacknowledgedCount } from "@/lib/reminders";
 import { rankTasks } from "@/lib/ranking";
-import { brainEnabled, pushEnabled, calendarEnabled } from "@/lib/config";
+import { pushEnabled, calendarEnabled } from "@/lib/config";
 import Board from "@/components/board";
 
 export const dynamic = "force-dynamic";
@@ -15,11 +15,11 @@ export default async function Home() {
   const all = (await listActiveTasks(owner)).filter((t) => !t.archivedAt);
   const tasks = rankTasks(all);
   const nextBest = tasks.find((t) => t.status === "todo" && !t.isBlocked)?.id ?? null;
-  const [version, unacknowledged] = await Promise.all([getVersion(), unacknowledgedCount(owner)]);
+  const [version, unacknowledged, brain] = await Promise.all([getVersion(), unacknowledgedCount(owner), brainOnline()]);
 
   return (
     <Board
-      initial={{ version, tasks, nextBest, unacknowledged, brain: brainEnabled(), push: pushEnabled(), calendar: calendarEnabled() }}
+      initial={{ version, tasks, nextBest, unacknowledged, brain, push: pushEnabled(), calendar: calendarEnabled() }}
     />
   );
 }

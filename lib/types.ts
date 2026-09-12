@@ -85,8 +85,30 @@ export const CapturedTask = z.object({
 });
 export type CapturedTask = z.infer<typeof CapturedTask>;
 
-export const CaptureResult = z.object({ tasks: z.array(CapturedTask) });
+export const CaptureResult = z.object({ tasks: z.array(CapturedTask).max(20) });
 export type CaptureResult = z.infer<typeof CaptureResult>;
+
+/** Preserve the complete bounded request when semantic parsing is unavailable. */
+export function fallbackCapture(text: string): CaptureResult {
+  const lines = text.split(/[\n;]+/).map((line) => line.trim()).filter(Boolean);
+  const tasks = (lines.length ? lines : [text]).slice(0, 20).map((line) => ({
+    title: line.slice(0, 200),
+    description: "",
+    priority: "med" as const,
+    priorityConfident: false,
+    dueAtConfident: false,
+    tags: [],
+    escalationPolicy: "default" as const,
+  }));
+  // Descriptions are limited to 5,000 characters; capture requests to 6,000.
+  // Even a many-line dump retains its original text instead of losing overflow.
+  tasks[0]!.description = text.slice(0, 5000);
+  if (text.length > 5000) {
+    if (!tasks[1]) tasks.push({ ...tasks[0]!, title: "Capture continued", description: "" });
+    tasks[1]!.description = text.slice(5000, 6000);
+  }
+  return CaptureResult.parse({ tasks });
+}
 
 /** Voice/text command verbs — inferred SEMANTICALLY, never by keyword (§3A). */
 export const Verb = z.enum(["want", "doing", "done", "blocked", "query", "reopen", "snooze"]);
@@ -94,7 +116,7 @@ export type Verb = z.infer<typeof Verb>;
 
 export const Command = z.object({
   verb: Verb,
-  cardRef: z.string().optional(), // the spoken phrase referring to an existing card
+  cardRef: z.string().uuid().optional(), // the spoken phrase referring to an existing card
   newTask: CapturedTask.optional(), // for `want`
   deadlineIST: z.string().datetime({ offset: true }).optional(),
   confidence: z.number().min(0).max(1).default(0.5),
@@ -103,7 +125,7 @@ export type Command = z.infer<typeof Command>;
 
 export const CommandResult = z.object({
   transcript: z.string(),
-  commands: z.array(Command),
+  commands: z.array(Command).max(20),
 });
 export type CommandResult = z.infer<typeof CommandResult>;
 
@@ -123,7 +145,7 @@ export type TriageResult = z.infer<typeof TriageResult>;
 /** "Ask your board": a natural answer plus optional actions to apply (confirm-gated). */
 export const AssistantResult = z.object({
   answer: z.string(),
-  actions: z.array(Command).default([]),
+  actions: z.array(Command).max(20).default([]),
 });
 export type AssistantResult = z.infer<typeof AssistantResult>;
 

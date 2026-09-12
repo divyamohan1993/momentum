@@ -1,156 +1,97 @@
 import "server-only";
-import { SignJWT, jwtVerify } from "jose";
-import { verify as argonVerify } from "@node-rs/argon2";
 import { cookies } from "next/headers";
+import { getAuth } from "firebase-admin/auth";
 import { env } from "./config";
 import { safeEqual } from "./crypto";
-import {
-  getLoginLock,
-  recordLoginFail,
-  clearLoginFails,
-  getMinIat,
-  audit,
-} from "./store";
+import { adminApp, adminDb, coll, audit } from "./store";
+import { opaqueToken, tokenHash } from "./login-proof";
+import { SESSION_COOKIE, SESSION_SECONDS, ownerIdentityAllowed, originAllowed, sessionAllowed, type BrowserSession } from "./auth-policy";
+export { SESSION_COOKIE } from "./auth-policy";
 
-export const SESSION_COOKIE = "momentum_session";
-const SESSION_SECONDS = 7 * 24 * 3600;
+const ownerIdentity = () => ({ email: env().ownerEmail, uid: env().ownerGoogleUid, googleSub: env().ownerGoogleSub, project: env().gcpProject });
+const sessionRef = () => coll("meta").doc("browser_sessions");
 
-function secretKey(): Uint8Array {
-  return new TextEncoder().encode(env().sessionSecret);
-}
-
-// ── session token ──
-export async function signSession(): Promise<string> {
-  const now = Math.floor(Date.now() / 1000);
-  return new SignJWT({ sub: env().ownerEmail })
-    .setProtectedHeader({ alg: "HS256" })
-    .setIssuedAt(now)
-    .setExpirationTime(now + SESSION_SECONDS)
-    .sign(secretKey());
-}
-
-// minIat cached 60s so requireOwner does NOT hit Firestore on every request (₹0 reads).
-let _minIat = { v: 0, exp: 0 };
-async function minIatCached(): Promise<number> {
-  if (Date.now() < _minIat.exp) return _minIat.v;
-  const v = await getMinIat();
-  _minIat = { v, exp: Date.now() + 60_000 };
-  return v;
+/** Only a recent, verified, non-revoked Google sign-in for the pinned owner can issue a session. */
+export async function createGoogleSession(idToken: string): Promise<string> {
+  if (process.env.FIREBASE_AUTH_EMULATOR_HOST && process.env.NODE_ENV === "production") throw new Error("auth unavailable");
+  const claims = await getAuth(adminApp()).verifyIdToken(idToken, true);
+  if (!ownerIdentityAllowed(claims, ownerIdentity())) throw new Error("access denied");
+  const token = opaqueToken();
+  const now = Date.now();
+  const session: BrowserSession = { hash: tokenHash(token), uid: env().ownerGoogleUid, createdAt: now, expiresAt: now + SESSION_SECONDS * 1000, authTime: claims.auth_time };
+  const exchangeHash = tokenHash(idToken);
+  await adminDb().runTransaction(async (tx) => {
+    const ref = sessionRef();
+    const snap = await tx.get(ref);
+    const d = snap.data() ?? {};
+    const exchanges: { hash: string; expiresAt: number }[] = (d.exchanges ?? []).filter((e: { expiresAt: number }) => e.expiresAt > now);
+    if (exchanges.some((e) => e.hash === exchangeHash) || exchanges.length >= 20) throw new Error("sign-in already used or limited");
+    const sessions: BrowserSession[] = (d.sessions ?? []).filter((s: BrowserSession) => sessionAllowed(s, env().ownerGoogleUid, now));
+    tx.set(ref, { sessions: [...sessions.slice(-4), session], exchanges: [...exchanges, { hash: exchangeHash, expiresAt: claims.exp * 1000 }] });
+  });
+  await audit("google_login_ok");
+  return token;
 }
 
 export async function ownerFromToken(token?: string): Promise<string | null> {
-  if (!token) return null;
+  // Old password JWTs, Firebase tokens and notification tokens are never portal sessions.
+  if (!token || !/^[A-Za-z0-9_-]{43}$/.test(token)) return null;
   try {
-    const { payload } = await jwtVerify(token, secretKey(), { algorithms: ["HS256"] });
-    if ((payload.sub as string)?.toLowerCase() !== env().ownerEmail) return null;
-    if ((payload.iat ?? 0) < (await minIatCached())) return null; // revoked
+    const snap = await sessionRef().get();
+    const sessions: BrowserSession[] = snap.data()?.sessions ?? [];
+    const s = sessions.find((entry) => entry.hash === tokenHash(token));
+    if (!sessionAllowed(s, env().ownerGoogleUid)) return null;
+    // Check disablement and Firebase revocation on every request; no cross-request cache.
+    const user = await getAuth(adminApp()).getUser(env().ownerGoogleUid);
+    const google = user.providerData.find((p) => p.providerId === "google.com");
+    if (user.disabled || !user.emailVerified || user.email?.toLowerCase() !== env().ownerEmail
+      || google?.uid !== env().ownerGoogleSub
+      || (user.tokensValidAfterTime && s!.authTime * 1000 < Date.parse(user.tokensValidAfterTime))) return null;
     return env().ownerEmail;
-  } catch {
-    return null;
-  }
+  } catch { return null; }
 }
 
 export async function currentOwner(): Promise<string | null> {
-  const c = (await cookies()).get(SESSION_COOKIE)?.value;
-  return ownerFromToken(c);
+  return ownerFromToken((await cookies()).get(SESSION_COOKIE)?.value);
 }
 
-const SECURE_COOKIE = process.env.NODE_ENV === "production";
+export async function revokeCurrentSession(): Promise<void> {
+  const token = (await cookies()).get(SESSION_COOKIE)?.value;
+  if (!token || !/^[A-Za-z0-9_-]{43}$/.test(token)) return;
+  await adminDb().runTransaction(async (tx) => {
+    const ref = sessionRef();
+    const d = (await tx.get(ref)).data();
+    if (!d) return;
+    tx.update(ref, { sessions: (d.sessions ?? []).filter((s: BrowserSession) => s.hash !== tokenHash(token)) });
+  });
+}
+
 export function sessionCookie(value: string) {
-  return {
-    name: SESSION_COOKIE,
-    value,
-    httpOnly: true,
-    secure: SECURE_COOKIE,
-    sameSite: "lax" as const,
-    path: "/",
-    maxAge: SESSION_SECONDS,
-  };
+  return { name: SESSION_COOKIE, value, httpOnly: true, secure: true, sameSite: "strict" as const, path: "/", maxAge: SESSION_SECONDS };
 }
-export function clearCookie() {
-  return { name: SESSION_COOKIE, value: "", httpOnly: true, secure: SECURE_COOKIE, sameSite: "lax" as const, path: "/", maxAge: 0 };
-}
+export function clearCookie() { return { ...sessionCookie(""), maxAge: 0 }; }
 
-// ── cheap in-memory IP token bucket (runs BEFORE Argon2id; review B4/B5) ──
-const buckets = new Map<string, { tokens: number; last: number }>();
-const BUCKET_CAP = 5;
-const REFILL_PER_SEC = 0.2; // ~1 token / 5s
-export function loginRateOk(ip: string): boolean {
+// Public login endpoints get a bounded global bucket before cryptography/Google calls.
+// This complements the durable owner-only exchange cap and Vertex's separate hard budget.
+let bucket = { tokens: 20, last: Date.now() };
+export function loginRateOk(): boolean {
   const now = Date.now();
-  const b = buckets.get(ip) ?? { tokens: BUCKET_CAP, last: now };
-  b.tokens = Math.min(BUCKET_CAP, b.tokens + ((now - b.last) / 1000) * REFILL_PER_SEC);
-  b.last = now;
-  if (buckets.size > 5000) buckets.clear(); // crude bound; single-owner tool
-  if (b.tokens < 1) {
-    buckets.set(ip, b);
-    return false;
-  }
-  b.tokens -= 1;
-  buckets.set(ip, b);
+  bucket.tokens = Math.min(20, bucket.tokens + (now - bucket.last) / 3000);
+  bucket.last = now;
+  if (bucket.tokens < 1) return false;
+  bucket.tokens--;
   return true;
 }
 
-export function getIp(req: Request): string {
-  const xff = req.headers.get("x-forwarded-for");
-  if (xff) return xff.split(",")[0]!.trim();
-  return req.headers.get("x-real-ip") ?? "unknown";
-}
-
-export type LoginResult = { ok: boolean; reason?: string; retryAfter?: number };
-
-export async function attemptLogin(passphrase: string, ip: string): Promise<LoginResult> {
-  if (!loginRateOk(ip)) return { ok: false, reason: "rate", retryAfter: 5 };
-  const lock = await getLoginLock();
-  if (lock.lockedUntil > Date.now())
-    return { ok: false, reason: "locked", retryAfter: Math.ceil((lock.lockedUntil - Date.now()) / 1000) };
-
-  let valid = false;
-  try {
-    valid = await argonVerify(env().ownerPassphraseHash, passphrase);
-  } catch {
-    valid = false;
-  }
-  if (!valid) {
-    const until = await recordLoginFail();
-    await audit("login_fail", { ip });
-    return { ok: false, reason: "invalid", retryAfter: until ? Math.ceil((until - Date.now()) / 1000) : undefined };
-  }
-  await clearLoginFails();
-  await audit("login_ok", { ip });
-  return { ok: true };
-}
-
-// ── boundary checks ──
-/** When EDGE_SECRET is set (behind Cloudflare), require the injected header (review B3). */
 export function edgeOk(req: Request): boolean {
   const s = env().edgeSecret;
-  if (!s) return true;
-  return safeEqual(req.headers.get("x-edge-auth") ?? "", s);
+  return !s || safeEqual(req.headers.get("x-edge-auth") ?? "", s);
 }
+export function originOk(req: Request): boolean { return originAllowed(req, env().appOrigin); }
 
-/** CSRF guard for mutating route handlers (H1): same-origin only. */
-export function originOk(req: Request): boolean {
-  const site = req.headers.get("sec-fetch-site");
-  if (site === "same-origin" || site === "none") return true;
-  const origin = req.headers.get("origin");
-  const host = req.headers.get("host");
-  if (!origin) return !site; // non-browser client (curl, OIDC) — allowed past CSRF, still auth-gated
-  try {
-    return new URL(origin).host === host;
-  } catch {
-    return false;
-  }
-}
-
-/** One guard to rule them all — call first in every protected handler (H5). */
-export async function guard(
-  req: Request,
-  opts: { mutation?: boolean } = {},
-): Promise<{ owner: string } | { res: Response }> {
+export async function guard(req: Request, opts: { mutation?: boolean } = {}): Promise<{ owner: string } | { res: Response }> {
   if (!edgeOk(req)) return { res: new Response("forbidden", { status: 403 }) };
-  if (opts.mutation && !originOk(req))
-    return { res: Response.json({ error: "bad origin" }, { status: 403 }) };
+  if (opts.mutation && !originOk(req)) return { res: Response.json({ error: "bad origin" }, { status: 403 }) };
   const owner = await currentOwner();
-  if (!owner) return { res: Response.json({ error: "unauthorized" }, { status: 401 }) };
-  return { owner };
+  return owner ? { owner } : { res: Response.json({ error: "unauthorized" }, { status: 401 }) };
 }

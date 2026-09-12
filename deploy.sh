@@ -1,8 +1,12 @@
 #!/usr/bin/env bash
-# Momentum — manual deploy to Cloud Run (₹0: min=0, max=1). Secrets come from local
+# Momentum — manual deploy to Cloud Run (min=0, max=1). Secrets come from local
 # secrets.json/.env → plain Cloud Run env vars (no Secret Manager). CI does the same from
 # GitHub Actions secrets. Prereqs: gcloud authed; secrets.json + .env present; APIs enabled.
 set -euo pipefail
+
+pnpm install --frozen-lockfile
+pnpm test
+pnpm audit --prod --audit-level=high
 
 PROJ="${GCP_PROJECT:-dmjone}"
 REGION="${RUN_REGION:-asia-east1}"

@@ -1,7 +1,7 @@
 import "server-only";
 import { initializeApp, getApps, applicationDefault, type App } from "firebase-admin/app";
 import { getFirestore, FieldValue, type Firestore, type DocumentData } from "firebase-admin/firestore";
-import { env } from "./config";
+import { env, brainEnabled } from "./config";
 import { encField, decField } from "./crypto";
 import { nowUtcIso, nowIstParts } from "./time";
 import { Task, type PushSub } from "./types";
@@ -12,7 +12,7 @@ import { Task, type PushSub } from "./types";
  * text fields are AES-256-GCM encrypted (B6). All access is server-side and owner-scoped.
  */
 
-function adminApp(): App {
+export function adminApp(): App {
   return (
     getApps()[0] ??
     initializeApp({ projectId: env().gcpProject, credential: applicationDefault() })
@@ -188,14 +188,18 @@ export async function archiveOldDone(owner: string): Promise<number> {
 
 // ─────────────────────────── gemini daily cap (atomic, B1/B2 defense) ───────────────────────────
 export async function reserveGeminiCall(cap: number): Promise<{ allowed: boolean; used: number }> {
+  if (!Number.isSafeInteger(cap) || cap <= 0 || cap > 200) return { allowed: false, used: 0 };
   const ref = coll("meta").doc("gemini");
   return adminDb().runTransaction(async (tx) => {
     const snap = await tx.get(ref);
     const today = istDateKey();
     const d = snap.exists ? snap.data()! : {};
     const used = d.date === today ? (d.count ?? 0) : 0;
-    if (used >= cap) return { allowed: false, used };
-    tx.set(ref, { date: today, count: used + 1, updatedAt: nowUtcIso() }, { merge: true });
+    const minute = Math.floor(Date.now() / 60_000);
+    const minuteCount = d.minute === minute ? (d.minuteCount ?? 0) : 0;
+    if (!Number.isSafeInteger(used) || used < 0 || !Number.isSafeInteger(minuteCount)
+      || minuteCount < 0 || used >= cap || minuteCount >= 10) return { allowed: false, used };
+    tx.set(ref, { date: today, count: used + 1, minute, minuteCount: minuteCount + 1, updatedAt: nowUtcIso() }, { merge: true });
     return { allowed: true, used: used + 1 };
   });
 }
@@ -281,4 +285,16 @@ export async function audit(kind: string, detail: Record<string, unknown> = {}):
   } catch {
     /* audit must never break the request path */
   }
+}
+
+/** Status is observational only: a previous failure never prevents a fresh attempt. */
+export async function recordBrainStatus(online: boolean, reason?: string): Promise<void> {
+  try {
+    await coll("meta").doc("brain").set({ online, reason: reason ?? null, checkedAt: nowUtcIso() });
+  } catch { /* A status write must not discard a successfully parsed capture. */ }
+}
+export async function brainOnline(): Promise<boolean> {
+  if (!brainEnabled()) return false;
+  const s = await coll("meta").doc("brain").get();
+  return s.data()?.online === true;
 }

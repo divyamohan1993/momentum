@@ -12,8 +12,8 @@ Dump the chaos of your week into one box — typed or spoken. Momentum *understa
 
 - **Intelligence is the product.** Natural-language capture, semantic voice control (no trigger words), auto-ranking with visible reasons ("ranked #1: due in 18h"), adaptive escalation. Not a CRUD board with a cron.
 - **Cinematic.** A mission-control cockpit: deep-space dark, a drifting aurora, cards that lift under your cursor, a ⌘K command palette, and a Focus Mode that brings one card full-screen with a live countdown ring.
-- **₹0, by construction.** Everything is serverless and scales to zero. Reminders are **event-driven Cloud Tasks** (one task at each deadline's exact time, deleted on completion) — **no background cron**, so when nothing is due and the app is closed, *nothing runs*. Held by enforced ceilings (`max-instances=1`, a Gemini key on a billing-disabled project that *cannot* bill, free-tier quotas), not by hope.
-- **Secure by default.** Owner-locked, field-level AES-256-GCM encryption on task text, Argon2id auth behind a rate-limiter, OIDC-verified internal calls. Secrets live as GitHub Actions secrets and are injected as Cloud Run env vars at deploy (no paid Secret Manager).
+- **Bounded running costs.** Cloud Run scales to zero; reminders use event-driven Cloud Tasks. The brain uses paid Vertex AI Gemini 2.5 Flash-Lite with at most 200 attempts/day (including retries), 10/minute, 16 KB of prompt text and 2,048 output tokens per attempt. Thinking is disabled. See [Vertex operations](infra/vertex-operations.md).
+- **Secure by default.** Owner-locked, field-level AES-256-GCM encryption on task text, Google-only sign-in pinned to the owner identity, revocable server-side sessions, OIDC-verified internal calls. Secrets live as GitHub Actions secrets and are injected as Cloud Run env vars at deploy (no paid Secret Manager).
 - **CI/CD.** Push to `main` → GitHub Actions builds from source and deploys to Cloud Run automatically. CI typechecks + builds every push and PR.
 
 ## Speak, and the board obeys
@@ -25,17 +25,20 @@ Intent is inferred semantically — say it however it comes out. Ambiguous? It a
 
 ## Stack
 
-Next.js 15 (App Router) · TypeScript · Tailwind v4 · Motion · dnd-kit · cmdk · Firestore (Admin SDK) · Gemini 2.5 Flash · Web Push (VAPID) · Cloud Run · Cloud Tasks (event-driven reminders) — deployed from source via Cloud Build.
+Next.js 15 (App Router) · TypeScript · Tailwind v4 · Motion · dnd-kit · cmdk · Firestore (Admin SDK) · Vertex AI Gemini 2.5 Flash-Lite · Web Push (VAPID) · Cloud Run · Cloud Tasks (event-driven reminders) — deployed from source via Cloud Build.
+
+Authentication setup and security boundaries: [Google sign-in operations](infra/google-auth-operations.md).
 
 ## Run it
 
 ```bash
 pnpm install
-node scripts/gen-secrets.mjs        # writes .env + prints the owner passphrase
+node scripts/gen-secrets.mjs        # NEW installation only; writes encryption/push secrets
+gcloud auth application-default login # local keyless Vertex + Firestore access
 pnpm dev                            # http://localhost:3000
 ```
 
-Deploy (Cloud Run, ₹0): `bash deploy.sh && bash setup-scheduler.sh`. Architecture and locked decisions: [`docs/dmj/specs`](docs/dmj/specs/2026-06-18-momentum-build-design.md) and [`idea.md`](idea.md).
+Deploy (Cloud Run): `bash deploy.sh && bash setup-tasks.sh`. Architecture and locked decisions: [`docs/dmj/specs`](docs/dmj/specs/2026-06-18-momentum-build-design.md) and [`idea.md`](idea.md).
 
 ---
 

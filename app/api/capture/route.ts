@@ -1,3 +1,4 @@
+import { readBrainBody } from "@/lib/brain-request";
 import { guard } from "@/lib/auth";
 import { capture } from "@/lib/brain";
 import { createFromCapture } from "@/lib/actions";
@@ -9,9 +10,13 @@ export const dynamic = "force-dynamic";
 export async function POST(req: Request) {
   const g = await guard(req, { mutation: true });
   if ("res" in g) return g.res;
-  const b = (await req.json().catch(() => ({}))) as { text?: unknown };
+  const body = await readBrainBody(req);
+  if ("res" in body) return body.res;
+  const b = body.data;
   if (typeof b.text !== "string" || !b.text.trim())
     return Response.json({ error: "text required" }, { status: 400 });
+
+  if ((b.text as string).length > 6000) return Response.json({ error: "Use at most 6000 characters" }, { status: 413 });
 
   const { result, degraded } = await capture(b.text.trim());
   const tasks = await createFromCapture(g.owner, result.tasks);

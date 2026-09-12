@@ -88,6 +88,8 @@ export type CommandOutcome = {
 
 /** Apply one classified command with the confidence gate (§3A "ask, don't guess"). */
 export async function applyCommand(owner: string, cmd: Command, minConf = 0.6): Promise<CommandOutcome> {
+  if (cmd.verb !== "query" && cmd.confidence < minConf)
+    return { status: "confirm", verb: cmd.verb, message: "Please clarify the action." };
   if (cmd.verb === "want") {
     if (cmd.newTask) {
       const [t] = await createFromCapture(owner, [cmd.newTask]);

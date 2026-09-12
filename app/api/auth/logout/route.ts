@@ -1,19 +1,11 @@
 import { NextResponse } from "next/server";
-import { clearCookie, edgeOk, originOk } from "@/lib/auth";
-
+import { clearCookie, edgeOk, originOk, revokeCurrentSession } from "@/lib/auth";
 export const dynamic = "force-dynamic";
-
 export async function POST(req: Request) {
-  if (!edgeOk(req)) return new NextResponse("forbidden", { status: 403 });
-  if (!originOk(req)) return NextResponse.json({ error: "bad origin" }, { status: 403 });
+  if (!edgeOk(req) || !originOk(req)) return NextResponse.json({ error: "forbidden" }, { status: 403 });
+  await revokeCurrentSession();
   const res = NextResponse.json({ ok: true });
-  const c = clearCookie();
-  res.cookies.set(c.name, c.value, {
-    httpOnly: c.httpOnly,
-    secure: c.secure,
-    sameSite: c.sameSite,
-    path: c.path,
-    maxAge: c.maxAge,
-  });
+  res.cookies.set(clearCookie());
+  res.cookies.set("momentum_session", "", { httpOnly: true, secure: true, sameSite: "strict", path: "/", maxAge: 0 });
   return res;
 }

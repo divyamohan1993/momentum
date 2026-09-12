@@ -89,7 +89,7 @@ export default function CaptureBar({
     <div className="glass mt-4 rounded-2xl p-2.5">
       <div className="mb-2 flex items-center gap-1.5">
         <Toggle active={mode === "capture"} onClick={() => setMode("capture")} label="✏️ Capture" />
-        <Toggle active={mode === "ask"} onClick={() => setMode("ask")} label="💬 Ask" disabled={!brain} />
+        <Toggle active={mode === "ask"} onClick={() => setMode("ask")} label={brain ? "💬 Ask" : "💬 Retry brain"} />
         <div className="ml-auto hidden text-xs text-[var(--color-faint)] sm:block">
           {mode === "capture" ? "Brain-dump everything — it splits, dates & ranks it." : "Ask: \"what's next?\", \"what's blocked?\", \"move this week's work to today\"."}
         </div>
@@ -116,6 +116,7 @@ export default function CaptureBar({
             }
           }}
           rows={1}
+          maxLength={6000}
           placeholder={mode === "capture" ? "finish the IICA deck tomorrow, fix the citation bug, call mom Sunday…" : "what should I do next? what's blocked? plan my week…"}
           className="focus-ring min-h-[2.75rem] flex-1 resize-none rounded-xl border border-[var(--color-edge)] bg-[var(--color-haze)] px-4 py-3 text-sm text-[var(--color-ink)] placeholder:text-[var(--color-faint)] outline-none"
         />

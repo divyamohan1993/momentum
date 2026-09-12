@@ -1,8 +1,8 @@
 import { guard } from "@/lib/auth";
-import { listActiveTasks, getVersion } from "@/lib/store";
+import { listActiveTasks, getVersion, brainOnline } from "@/lib/store";
 import { unacknowledgedCount } from "@/lib/reminders";
 import { rankTasks } from "@/lib/ranking";
-import { brainEnabled, pushEnabled, calendarEnabled } from "@/lib/config";
+import { pushEnabled, calendarEnabled } from "@/lib/config";
 
 export const dynamic = "force-dynamic";
 
@@ -14,14 +14,14 @@ export async function GET(req: Request) {
   const visible = all.filter((t) => !t.archivedAt);
   const ranked = rankTasks(visible);
   const nextBest = ranked.find((t) => t.status === "todo" && !t.isBlocked)?.id ?? null;
-  const [version, unacknowledged] = await Promise.all([getVersion(), unacknowledgedCount(g.owner)]);
+  const [version, unacknowledged, brain] = await Promise.all([getVersion(), unacknowledgedCount(g.owner), brainOnline()]);
 
   return Response.json({
     version,
     tasks: ranked,
     nextBest,
     unacknowledged,
-    brain: brainEnabled(),
+    brain,
     push: pushEnabled(),
     calendar: calendarEnabled(),
   });

@@ -1,7 +1,7 @@
 import { OAuth2Client } from "google-auth-library";
 import { env } from "@/lib/config";
 import { fireAndChain } from "@/lib/reminders";
-import { currentOwner, edgeOk } from "@/lib/auth";
+import { currentOwner, edgeOk, originOk } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
@@ -9,6 +9,7 @@ const oauth = new OAuth2Client();
 
 // Target of the per-reminder Cloud Task. OIDC-pinned (review B7): SA email + audience + verified.
 async function oidcOk(req: Request): Promise<boolean> {
+  if (!env().appBaseUrl || !env().sweepInvokerSa || !env().sweepAudience) return false;
   const m = /^Bearer (.+)$/.exec(req.headers.get("authorization") ?? "");
   if (!m) return false;
   try {
@@ -29,7 +30,7 @@ export async function POST(req: Request) {
   if (!edgeOk(req)) return new Response("forbidden", { status: 403 });
 
   let authed = await oidcOk(req);
-  if (!authed) authed = !!(await currentOwner()); // owner can also trigger (tests/manual)
+  if (!authed) authed = originOk(req) && !!(await currentOwner()); // owner can also trigger (tests/manual)
   if (!authed) return Response.json({ error: "unauthorized" }, { status: 401 });
 
   const b = (await req.json().catch(() => ({}))) as { taskId?: unknown };
