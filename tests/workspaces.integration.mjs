@@ -27,7 +27,7 @@ async function idp(name){
  const d=await r.json();assert.equal(r.status,200,JSON.stringify(d));return d;
 }
 const firstAlice=await idp('alice'),firstBob=await idp('bob');
-for(const collection of ['tasks','reminders','meta','workspaces','sessions','devices','audit'])await db.recursiveDelete(db.collection('momentum_'+collection));
+for(const collection of ['tasks','reminders','meta','workspaces','sessions','devices','audit','shared_lists','shared_memberships'])await db.recursiveDelete(db.collection('momentum_'+collection));
 const legacyId=randomUUID();
 await db.collection('momentum_tasks').doc(legacyId).set({ownerId:'alice@example.test',title:legacyCipher('Alice legacy task'),description:legacyCipher('Legacy private note'),status:'todo',priority:'med',tags:['legacy'],deletedAt:null,createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()});
 await db.collection('momentum_meta').doc('version').set({v:7});
@@ -100,6 +100,63 @@ try{
  ok(rawA.title.startsWith('v2:')&&rawB.title.startsWith('v2:'),'New task fields are not encrypted');
  const direct=await fetch(`http://${firestoreHost}/v1/projects/${project}/databases/(default)/documents/momentum_tasks/${taskA.id}`,{headers:{Authorization:'Bearer '+bob.lastIdToken}});
  ok(direct.status===403,'Browser token bypassed Firestore rules');
+ // Shared-list membership, invite lifecycle, optimistic concurrency, and private-data boundaries.
+ const shared=await alice.call('/api/shared',{action:'create',name:'Our home'});
+ ok(shared.status===200,'Shared list creation failed: '+JSON.stringify(shared.data));const sharedId=shared.data.id;
+ ok((await bob.call('/api/shared?id='+sharedId)).status===404,'Non-member read shared list');
+ ok((await bob.call('/api/shared')).data.lists.length===0,'Shared list leaked through index');
+ ok((await bob.call('/api/shared',{action:'addTask',id:sharedId,task:{title:'Intruder'}})).status===404,'Non-member changed shared list');
+ const invitation=await alice.call('/api/shared',{action:'invite',id:sharedId,email:'bob@example.test'});
+ ok(invitation.status===200&&invitation.data.token,'Invitation creation failed');
+ ok((await alice.call('/api/shared',{action:'accept',token:invitation.data.token})).status===404,'Wrong Google email accepted invitation');
+ ok((await bob.call('/api/shared',{action:'accept',token:invitation.data.token})).status===200,'Recipient could not join');
+ ok((await bob.call('/api/shared',{action:'accept',token:invitation.data.token})).status===404,'Invitation replay accepted');
+ ok((await bob.call('/api/shared')).data.lists.length===1,'Joined list missing');
+ let sharedDetail=(await bob.call('/api/shared?id='+sharedId)).data.list;
+ ok(sharedDetail.members.length===2&&sharedDetail.invitations.length===0,'Membership/invitation visibility incorrect');
+ ok((await bob.call('/api/shared',{action:'invite',id:sharedId,email:'eve@example.test'})).status===403,'Member issued invitations');
+ ok((await bob.call('/api/shared',{action:'removeMember',id:sharedId,uid:firstAlice.localId})).status===403,'Member removed owner');
+ ok((await bob.call('/api/shared',{action:'delete',id:sharedId})).status===403,'Member deleted list');
+ ok((await alice.call('/api/shared',{action:'leave',id:sharedId})).status===400,'Owner abandoned ownership');
+ ok((await bob.call('/api/shared',{action:'addTask',id:sharedId,task:{title:'Buy groceries',notes:'Milk and bread',assignee:firstBob.localId,dueDate:'2027-01-31'}})).status===200,'Member task creation failed');
+ sharedDetail=(await alice.call('/api/shared?id='+sharedId)).data.list;const sharedTask=sharedDetail.tasks[0];
+ ok(sharedTask.title==='Buy groceries'&&sharedTask.assignee===firstBob.localId,'Task not shared with owner');
+ const edits=await Promise.all([alice.call('/api/shared',{action:'editTask',id:sharedId,taskId:sharedTask.id,revision:1,patch:{status:'done'}}),bob.call('/api/shared',{action:'editTask',id:sharedId,taskId:sharedTask.id,revision:1,patch:{title:'Changed groceries'}})]);
+ ok(edits.filter(r=>r.status===200).length===1&&edits.filter(r=>r.status===409).length===1,'Concurrent edits silently overwrote each other');
+ ok((await bob.call('/api/shared',{action:'editTask',id:sharedId,taskId:sharedTask.id,revision:2,patch:{assignee:'foreign-user'}})).status===400,'Foreign assignee accepted');
+ ok((await bob.call('/api/shared',{action:'addTask',id:sharedId,task:{title:'Invalid date',dueDate:'2027-02-31'}})).status===400,'Invalid due date accepted');
+ ok((await alice.call('/api/tasks',{id:sharedTask.id,patch:{title:'Wrong store'}},'PATCH')).status===404,'Shared task entered private task endpoint');
+ ok(!(await alice.call('/api/board')).data.tasks.some(t=>t.id===sharedTask.id),'Shared task mixed into private board');
+ const storedShared=(await db.collection('momentum_shared_lists').doc(sharedId).get()).data();
+ ok(storedShared.name.startsWith('v2:')&&storedShared.tasks[0].title.startsWith('v2:')&&!JSON.stringify(storedShared).includes(invitation.data.token),'Shared content/invitation storage unsafe');
+ const sharedDirect=await fetch(`http://${firestoreHost}/v1/projects/${project}/databases/(default)/documents/momentum_shared_lists/${sharedId}`,{headers:{Authorization:'Bearer '+bob.lastIdToken}});
+ ok(sharedDirect.status===403,'Browser token bypassed shared-list authorization');
+ const eve=new Client();await eve.login('eve');
+ const revoked=await alice.call('/api/shared',{action:'invite',id:sharedId,email:'eve@example.test'});
+ let ownerDetail=(await alice.call('/api/shared?id='+sharedId)).data.list;
+ ok((await alice.call('/api/shared',{action:'revoke',id:sharedId,inviteId:ownerDetail.invitations[0].id})).status===200,'Invite revocation failed');
+ ok((await eve.call('/api/shared',{action:'accept',token:revoked.data.token})).status===404,'Revoked invitation accepted');
+ const expired=await alice.call('/api/shared',{action:'invite',id:sharedId,email:'eve@example.test'});
+ const groupRef=db.collection('momentum_shared_lists').doc(sharedId),rawGroup=(await groupRef.get()).data();
+ await groupRef.update({invitations:rawGroup.invitations.map(i=>({...i,expiresAt:Date.now()-1}))});
+ ok((await eve.call('/api/shared',{action:'accept',token:expired.data.token})).status===404,'Expired invitation accepted');
+ const third=await alice.call('/api/shared',{action:'invite',id:sharedId,email:'eve@example.test'});
+ ok((await eve.call('/api/shared',{action:'accept',token:third.data.token})).status===200,'Third member could not join');
+ ok((await eve.call('/api/shared?id='+sharedId)).data.list.members.length===3,'More than two members unsupported');
+ ok((await alice.call('/api/shared',{action:'removeMember',id:sharedId,uid:firstBob.localId})).status===200,'Member removal failed');
+ ok((await bob.call('/api/shared?id='+sharedId+'&version=1')).status===404,'Removed member read through polling');
+ ok((await bob.call('/api/shared',{action:'deleteTask',id:sharedId,taskId:sharedTask.id,revision:2})).status===404,'Removed member retained write access');
+ ok(!(await bob.call('/api/shared')).data.lists.length,'Removed list retained in member index');
+ ok((await alice.call('/api/shared?id='+sharedId)).data.list.tasks[0].assignee===null,'Removed assignee retained');
+ ok((await eve.call('/api/shared',{action:'leave',id:sharedId})).status===200,'Member could not leave');
+ ok((await eve.call('/api/shared?id='+sharedId)).status===404,'Departed member retained access');
+ const rejoin=await alice.call('/api/shared',{action:'invite',id:sharedId,email:'eve@example.test'});
+ await eve.call('/api/shared',{action:'accept',token:rejoin.data.token});
+ ok((await alice.call('/api/shared',{action:'delete',id:sharedId})).status===200,'Owner deletion failed');
+ ok(!(await groupRef.get()).exists&&(await eve.call('/api/shared')).data.lists.length===0,'Deleted list/task data or memberships remained');
+ const anonymous=new Client();ok((await anonymous.call('/api/shared')).status===401,'Anonymous shared API access accepted');
+ const csrf=await fetch(origin+'/api/shared',{method:'POST',headers:{origin:'https://attacker.test','content-type':'application/json',cookie:[...alice.cookies].map(([k,v])=>`${k}=${v}`).join('; ')},body:JSON.stringify({action:'create',name:'CSRF'})});
+ ok(csrf.status===403,'Cross-origin shared mutation accepted');
  const proof=await bob.call('/api/auth/google/challenge',{});
  ok((await bob.call('/api/auth/google',{idToken:bob.lastIdToken,csrf:proof.data.csrf})).status===401,'Identity token exchange replay accepted');
  const ecdh=createECDH('prime256v1');ecdh.generateKeys();
@@ -127,7 +184,7 @@ try{
   const state={cookies:[...alice.cookies].map(([name,value])=>({name,value,domain:'localhost',path:'/',httpOnly:true,secure:true,sameSite:'Strict',expires:Math.floor(Date.now()/1000)+3600})),origins:[]};
   writeFileSync(process.env.MOMENTUM_TEST_BROWSER_STATE,JSON.stringify(state),{mode:0o600});
  }
- console.log(`Workspace integration: ${checks} checks passed (two isolated emulator accounts).`);
+ console.log(`Workspace integration: ${checks} checks passed (three isolated emulator accounts).`);
  if(process.env.MOMENTUM_TEST_READY_FILE) writeFileSync(process.env.MOMENTUM_TEST_READY_FILE,"ready");
  if(process.env.MOMENTUM_TEST_PAUSE_FOR_BROWSER === "1") {
    for(let i=0;i<180;i++){if(process.env.MOMENTUM_TEST_DONE_FILE && (await import("node:fs")).existsSync(process.env.MOMENTUM_TEST_DONE_FILE))break;await new Promise(resolve=>setTimeout(resolve,1000));}

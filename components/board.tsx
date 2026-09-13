@@ -363,6 +363,7 @@ function Header({
         </div>
       </div>
       <div className="flex flex-wrap items-center gap-2">
+        <a href="/shared" className="focus-ring hairline rounded-lg px-3 py-2 text-xs">Shared lists</a>
         <button onClick={onSettings} className="focus-ring hairline rounded-lg px-3 py-2 text-xs">Workspace & data</button>
         <button
           onClick={onToday}

@@ -17,7 +17,7 @@ export function middleware(req: NextRequest) {
   const requestHeaders = new Headers(req.headers);
   requestHeaders.set("x-nonce", nonce);
   requestHeaders.set("Content-Security-Policy", csp);
-  const isPublic = pathname === "/login" || pathname.startsWith("/api/") || pathname.startsWith("/_next/")
+  const isPublic = pathname === "/login" || pathname === "/shared" || pathname.startsWith("/api/") || pathname.startsWith("/_next/")
     || pathname === "/sw.js" || pathname === "/manifest.webmanifest" || /\.(svg|png|ico|jpg|jpeg|webp|gif)$/.test(pathname)
     || pathname.startsWith("/icons") || pathname.startsWith("/apple-icon");
   // Browser entry points use one cookie origin; Cloud Tasks keep their existing API URLs.

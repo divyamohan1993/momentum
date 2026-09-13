@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { initializeApp, getApps, type FirebaseOptions } from "firebase/app";
 import { getAuth, setPersistence, inMemoryPersistence, GoogleAuthProvider, signInWithPopup, signOut, type Auth } from "firebase/auth";
 
-export default function GoogleLogin({ config, enabled }: { config: FirebaseOptions; enabled: boolean }) {
+export default function GoogleLogin({ config, enabled, destination = "/" }: { config: FirebaseOptions; enabled: boolean; destination?: "/" | "/shared" }) {
   const [auth, setAuth] = useState<Auth | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -41,7 +41,7 @@ export default function GoogleLogin({ config, enabled }: { config: FirebaseOptio
         for (const notification of await registration?.getNotifications() ?? []) notification.close();
       }
       try { localStorage.setItem("momentum-auth-change", crypto.randomUUID()); } catch {}
-      window.location.replace("/");
+      window.location.replace(destination === "/shared" ? "/shared" + window.location.hash : "/");
     } catch {
       setError("Sign-in was not completed. Please try again and allow the Google popup.");
     } finally {
@@ -55,7 +55,7 @@ export default function GoogleLogin({ config, enabled }: { config: FirebaseOptio
       <section className="glass materialize w-full max-w-sm rounded-3xl p-8 text-center" style={{ boxShadow: "0 40px 130px -40px rgba(255,77,141,0.45)" }}>
         <div className="mx-auto mb-6 grid h-16 w-16 place-items-center" style={{ animation: "floaty 5s ease-in-out infinite" }}><RingMark /></div>
         <h1 className="text-grad text-2xl font-extrabold tracking-tight" style={{ fontFamily: "var(--font-display)" }}>Momentum</h1>
-        <p className="mt-1 text-sm text-[var(--color-mute)]">Your AI chief of staff.</p>
+        <p className="mt-1 text-sm text-[var(--color-mute)]">{destination === "/shared" ? "Sign in to create or join a shared list." : "Your AI chief of staff."}</p>
         <button type="button" onClick={login} disabled={!auth || busy} className="focus-ring mt-7 flex min-h-11 w-full items-center justify-center gap-3 rounded-xl border border-[#747775] bg-white px-4 py-3 font-medium text-[#1f1f1f] disabled:opacity-50">
           <GoogleMark />{busy ? "Signing in…" : "Continue with Google"}
         </button>
